@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>動物将棋 AI (最適化版)</title>
+    <title>動物将棋 AI (ver1.2)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
@@ -143,6 +143,28 @@
         .btn-reset { background-color: #e53935; }
         .btn-turn { background-color: #fb8c00; }
 
+        /* 追加: 設定ボックス */
+        #settings-box {
+            background: #fff3e0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #ffe0b2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        #settings-box input[type=range] {
+            flex: 1;
+            max-width: 150px;
+            cursor: pointer;
+            accent-color: var(--primary-color);
+        }
+
         #footer { margin-top: 10px; font-size: 0.7rem; color: #9e9e9e; text-align: center; }
     </style>
 </head>
@@ -180,6 +202,12 @@
             <button class="btn-undo" id="btn-undo" onclick="game.undo()">↩ 待った</button>
             <button class="btn-reset" id="btn-reset" onclick="game.showStartScreen()">🔄 最初から</button>
         </div>
+    </div>
+
+    <!-- 追加: 思考時間設定 -->
+    <div id="settings-box">
+        <label for="ai-time">AI思考時間: <span id="ai-time-val">5</span>秒</label>
+        <input type="range" id="ai-time" min="1" max="20" step="1" value="5">
     </div>
 
     <div id="footer">Optimaized Edition (TypedArray & Worker)</div>
@@ -612,6 +640,15 @@ class App {
         this.evalText = document.getElementById("eval-text");
         this.startScreen = document.getElementById("start-screen");
 
+        // 追加: 設定要素
+        this.timeSlider = document.getElementById("ai-time");
+        this.timeVal = document.getElementById("ai-time-val");
+
+        // スライダーのイベントリスナー
+        this.timeSlider.addEventListener("input", (e) => {
+            this.timeVal.innerText = e.target.value;
+        });
+
         this.ai = new WorkerAI();
         this.sessionId = 0;
 
@@ -741,7 +778,10 @@ class App {
         this.updateStatus();
         const mySessionId = this.sessionId;
         
-        this.ai.search(this.gameState, 5.0, mySessionId,
+        // スライダーから思考時間を取得
+        const duration = parseFloat(this.timeSlider.value);
+        
+        this.ai.search(this.gameState, duration, mySessionId,
             (sims) => { 
                 if(this.sessionId === mySessionId) this.subMsgEl.innerText = `読み筋: ${sims.toLocaleString()}手`; 
             },
