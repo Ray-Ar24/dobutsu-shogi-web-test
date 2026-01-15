@@ -1,6 +1,6 @@
-import { BitState } from './BitState.js'; // 変更
+import { BitState } from './BitState.js';
 
-// 定石ライン（前回と同じ）
+// 定石ライン
 const OPENING_LINES = [
     [[11,8], [0,3], [7,4], [3,4], [9,5], [2,6]],
     [[7,4], [0,4]],
@@ -19,7 +19,7 @@ const OPENING_LINES = [
 
 export function buildOpeningBook() {
     const book = {};
-    const rootState = new BitState(); // BitStateを使用
+    const rootState = new BitState();
     
     OPENING_LINES.forEach(line => {
         let state = rootState.clone();
@@ -29,13 +29,11 @@ export function buildOpeningBook() {
             
             const key = state.toStringKey();
             const validMoves = state.getValidMoves();
-            // BitStateのMoveオブジェクトは {type:0|1, src, dst, promote}
+            // BitStateのMoveは type:0=MOVE
             const move = validMoves.find(m => m.type === 0 && m.src === src && m.dst === dst);
             
             if (move) {
-                if (!book[key]) {
-                    book[key] = move;
-                }
+                if (!book[key]) book[key] = move;
                 state = state.makeMove(move);
             } else {
                 break;
