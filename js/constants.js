@@ -7,15 +7,7 @@ export const NIWATORI = 5;
 export const PIECE_NAMES = { 1: "ひ", 2: "き", 3: "ぞ", 4: "王", 5: "に" };
 export const PIECE_VALUES = { 1: 10, 2: 40, 3: 40, 4: 1000, 5: 50 };
 
-// 駒の移動定義
-export const DIRS = {
-    1: [[-1, 0]], 
-    2: [[-1, 0], [1, 0], [0, -1], [0, 1]],
-    3: [[-1, -1], [-1, 1], [1, -1], [1, 1]],
-    4: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]],
-    5: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, 0]]
-};
-
+// UI用
 export const UI_CONSTANTS = {
     CELL_SIZE: 100,
     BOARD_OFFSET_X: 75,
@@ -27,3 +19,19 @@ export const UI_CONSTANTS = {
         SELECTED: "#ffee58", TEXT: "#3e2723"
     }
 };
+
+// --- Bitboard Constants ---
+// 盤面インデックス (3x4)
+// 0  1  2
+// 3  4  5
+// 6  7  8
+// 9 10 11
+
+// 先手(Sente)のトライエリア: 0,1,2 (bit 0-2)
+export const SENTE_TRY_MASK = 0b000000000111;
+// 後手(Gote)のトライエリア: 9,10,11 (bit 9-11)
+export const GOTE_TRY_MASK  = 0b111000000000;
+
+// 成りゾーン
+export const SENTE_PROMOTE_MASK = 0b000000000111; // 0,1,2
+export const GOTE_PROMOTE_MASK  = 0b111000000000; // 9,10,11
