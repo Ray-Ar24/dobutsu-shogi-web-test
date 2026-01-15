@@ -3,28 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>動物将棋 AI (OOP版)</title>
+    <title>最強動物将棋AI (高速化版)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+    
+    <style>
+        :root {
+            --bg-color: #faf7f0;
+            --primary-color: #5d4037;
+            --board-border: #8d6e63;
+            --sente-color: #ff7043;
+            --gote-color: #42a5f5;
+        }
+
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            background-color: var(--bg-color);
+            color: #3e2723;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            overscroll-behavior: none;
+        }
+
+        h1 {
+            margin: 5px 0;
+            font-size: 1.4rem;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .app-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 12px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* スタート画面オーバーレイ */
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 16px;
+            gap: 15px;
+        }
+        .start-btn {
+            width: 80%;
+            padding: 15px;
+            font-size: 1.1rem;
+            border-radius: 30px;
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+        }
+        .start-btn:active { transform: scale(0.95); }
+        .btn-sente { background: var(--sente-color); }
+        .btn-gote { background: var(--gote-color); }
+        .btn-demo { background: #7b1fa2; }
+
+        /* 形勢バー */
+        #eval-container {
+            width: 100%; height: 24px; background: #eee;
+            border-radius: 12px; overflow: hidden; display: flex;
+            position: relative;
+        }
+        .eval-bar {
+            height: 100%; display: flex; align-items: center;
+            font-size: 0.75rem; font-weight: bold; color: #fff;
+            transition: width 0.5s ease-out; padding: 0 8px;
+            white-space: nowrap; overflow: hidden;
+        }
+        #bar-sente { background: var(--sente-color); width: 50%; justify-content: flex-start; }
+        #bar-gote { background: var(--gote-color); width: 50%; justify-content: flex-end; }
+        #eval-text { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--primary-color); margin-top: -5px; }
+
+        /* ステータス */
+        #status-box {
+            background: #f5f5f5; padding: 6px; border-radius: 8px;
+            text-align: center; border: 1px solid #e0e0e0;
+        }
+        #status-msg { font-size: 1rem; font-weight: bold; }
+        #sub-msg { font-size: 0.75rem; color: #757575; min-height: 1.2em; }
+
+        /* キャンバス */
+        #canvas-wrapper {
+            width: 100%;
+            aspect-ratio: 450 / 700;
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid var(--board-border);
+            background-color: #ffe082;
+            touch-action: none;
+        }
+        canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+        /* コントロール */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .controls-row { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        button {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            border: none; border-radius: 8px; padding: 0; height: 48px;
+            font-size: 0.9rem; font-weight: bold; color: white; cursor: pointer;
+            box-shadow: 0 3px 0 rgba(0,0,0,0.2); transition: transform 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        button:active { transform: translateY(3px); box-shadow: none; }
+        button:disabled { background-color: #cfd8dc !important; box-shadow: none !important; color: #90a4ae; cursor: not-allowed; transform: none; }
+
+        .btn-analyze { background-color: #8e24aa; grid-column: 1 / -1; }
+        .btn-undo { background-color: #00897b; }
+        .btn-reset { background-color: #e53935; }
+
+        /* 設定ボックス */
+        #settings-box {
+            background: #fff3e0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #ffe0b2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        #settings-box input[type=range] {
+            flex: 1;
+            max-width: 150px;
+            cursor: pointer;
+            accent-color: var(--primary-color);
+        }
+
+        #footer { margin-top: 10px; font-size: 0.7rem; color: #9e9e9e; text-align: center; }
+    </style>
 </head>
 <body>
 
 <div class="app-container">
-    <h1>🦁 動物将棋 AI</h1>
+    <h1>🦁 最強動物将棋AI (高速版)</h1>
 
     <!-- スタート画面 -->
     <div id="start-screen">
-        <h2>対局開始</h2>
-        <button class="start-btn btn-sente" id="btn-start-sente">先手で対局 (手前)</button>
-        <button class="start-btn btn-gote" id="btn-start-gote">後手で対局 (AI先手)</button>
+        <h2>対局モード選択</h2>
+        <button class="start-btn btn-sente" onclick="game.startGame(1)">先手で対局 (手前)</button>
+        <button class="start-btn btn-gote" onclick="game.startGame(-1)">後手で対局 (AI先手)</button>
+        <button class="start-btn btn-demo" onclick="game.startGame(0)">AI vs AI (観戦モード)</button>
     </div>
 
     <!-- 形勢バー -->
     <div id="eval-container">
-        <div id="bar-sente" class="eval-bar" style="width: 50%">先手 50%</div>
-        <div id="bar-gote" class="eval-bar" style="width: 50%">後手 50%</div>
+        <div id="bar-sente" class="eval-bar" style="width: 50%">先手 0</div>
+        <div id="bar-gote" class="eval-bar" style="width: 50%">後手 0</div>
     </div>
     <div id="eval-text">形勢: 互角</div>
 
@@ -38,24 +198,1162 @@
     </div>
 
     <div class="controls">
-        <button class="btn-analyze" id="btn-analyze">🤔 形勢判断</button>
+        <button class="btn-analyze" id="btn-analyze" onclick="game.analyze()">🤔 局面解析</button>
         <div class="controls-row">
-            <button class="btn-undo" id="btn-undo">↩ 待った</button>
-            <button class="btn-reset" id="btn-reset">🔄 最初から</button>
+            <button class="btn-undo" id="btn-undo" onclick="game.undo()">↩ 待った</button>
+            <button class="btn-reset" id="btn-reset" onclick="game.showStartScreen()">🔄 最初から</button>
         </div>
     </div>
 
     <!-- 思考時間設定 -->
     <div id="settings-box">
-        <label for="ai-time">AI思考時間: <span id="ai-time-val">5</span>秒</label>
-        <input type="range" id="ai-time" min="1" max="20" step="1" value="5">
+        <label for="ai-time">AI思考時間: <span id="ai-time-val">2</span>秒</label>
+        <input type="range" id="ai-time" min="0.5" max="10" step="0.5" value="2">
     </div>
 
-    <div id="footer">Ultimate Edition (OOP & ES Modules)</div>
+    <div id="footer">High-Performance Engine (Make/Unmake + Zobrist)</div>
 </div>
 
-<!-- メインスクリプト (Moduleとして読み込み) -->
-<script type="module" src="js/main.js"></script>
+<script>
+/**
+ * 最強動物将棋AI (High-Performance Version)
+ * - Make/Unmake architecture for speed (no cloning)
+ * - Integer-encoded moves
+ * - Zobrist Hashing
+ * - Iterative Deepening + AlphaBeta + TT
+ */
 
+// --- 1. 定数・クラス定義 (UI用) ---
+
+const HIYOKO=1, KIRIN=2, ZOU=3, LION=4, NIWATORI=5;
+const PIECE_NAMES = { 1: "ひ", 2: "き", 3: "ぞ", 4: "王", 5: "に" };
+
+// UI定数
+const CELL_SIZE = 100;
+const BOARD_OFFSET_X = 75;
+const BOARD_OFFSET_Y = 150;
+const COLORS = {
+    SENTE_BASE: "#ff7043", SENTE_SHADOW: "#bf360c",
+    GOTE_BASE: "#42a5f5", GOTE_SHADOW: "#0d47a1",
+    BOARD_LIGHT: "#fff9c4", BOARD_DARK: "#fff176",
+    SELECTED: "#ffee58", TEXT: "#3e2723"
+};
+
+const DIRS = {
+    1: [[-1, 0]], 
+    2: [[-1, 0], [1, 0], [0, -1], [0, 1]],
+    3: [[-1, -1], [-1, 1], [1, -1], [1, 1]],
+    4: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]],
+    5: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, 0]]
+};
+
+// UI用のGameState (履歴保持のためCloneを使用する既存の実装を維持)
+class GameState {
+    constructor(cloneSource = null) {
+        if (cloneSource) {
+            this.board = cloneSource.board.slice(); 
+            this.hands = cloneSource.hands.slice();
+            this.turn = cloneSource.turn;
+            this.moveCount = cloneSource.moveCount;
+        } else {
+            // 初期配置
+            // -2 -4 -3
+            //  0 -1  0
+            //  0  1  0
+            //  3  4  2
+            this.board = new Int8Array([-2, -4, -3, 0, -1, 0, 0, 1, 0, 3, 4, 2]);
+            this.hands = new Uint8Array(12); // Index 1-5: Sente, 7-11: Gote
+            this.turn = 1; 
+            this.moveCount = 0;
+        }
+    }
+
+    clone() {
+        return new GameState(this);
+    }
+    
+    toHashKey() {
+        return this.board.join("") + this.hands.join("") + this.turn;
+    }
+    
+    getHandsList(turn) {
+        const list = [];
+        const offset = turn === 1 ? 0 : 6;
+        for (let k = 1; k <= 5; k++) {
+            const count = this.hands[offset + k];
+            for (let c = 0; c < count; c++) {
+                list.push(k);
+            }
+        }
+        return list;
+    }
+
+    checkWin() {
+        let sLion = -1, gLion = -1;
+        for(let i=0; i<12; i++) {
+            if (this.board[i] === 4) sLion = i;
+            else if (this.board[i] === -4) gLion = i;
+        }
+        if (sLion === -1) return -1; 
+        if (gLion === -1) return 1;  
+
+        // トライ
+        if (sLion < 3 && this.turn === 1) return 1;
+        if (gLion >= 9 && this.turn === -1) return -1;
+        
+        return 0;
+    }
+
+    getValidMoves() {
+        const moves = [];
+        const turn = this.turn;
+        
+        for (let i = 0; i < 12; i++) {
+            const p = this.board[i];
+            if (p * turn > 0) { // 自駒
+                const kind = Math.abs(p);
+                const dirs = DIRS[kind];
+                for (let d of dirs) {
+                    const r_dy = (turn === 1) ? d[0] : -d[0];
+                    const r_dx = (turn === 1) ? d[1] : -d[1];
+                    const cy = Math.floor(i / 3), cx = i % 3;
+                    const ty = cy + r_dy, tx = cx + r_dx;
+                    
+                    if (ty >= 0 && ty < 4 && tx >= 0 && tx < 3) {
+                        const ti = ty * 3 + tx;
+                        const tp = this.board[ti];
+                        if (tp === 0 || tp * turn < 0) { // 空 or 敵駒
+                            let promote = false;
+                            if (kind === HIYOKO) {
+                                if ((turn === 1 && ty === 0) || (turn === -1 && ty === 3)) promote = true;
+                            }
+                            moves.push({ type: 'MOVE', src: i, dst: ti, promote: promote, capture: Math.abs(tp) });
+                        }
+                    }
+                }
+            }
+        }
+        
+        const offset = turn === 1 ? 0 : 6;
+        for (let k = 1; k <= 5; k++) {
+            if (this.hands[offset + k] > 0) {
+                for (let ei = 0; ei < 12; ei++) {
+                    if (this.board[ei] === 0) {
+                        if (k === HIYOKO) {
+                            const r = Math.floor(ei / 3);
+                            if ((turn === 1 && r === 0) || (turn === -1 && r === 3)) continue;
+                        }
+                        moves.push({ type: 'DROP', src: k, dst: ei, promote: false, capture: 0 });
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    makeMove(move) {
+        const next = this.clone();
+        const turn = next.turn;
+        const myOffset = turn === 1 ? 0 : 6;
+        
+        if (move.type === 'MOVE') {
+            const captured = next.board[move.dst];
+            if (captured !== 0) {
+                let k = Math.abs(captured);
+                if (k === NIWATORI) k = HIYOKO;
+                next.hands[myOffset + k]++;
+            }
+            const p = next.board[move.src];
+            next.board[move.dst] = move.promote ? (NIWATORI * turn) : p;
+            next.board[move.src] = 0;
+        } else {
+            next.board[move.dst] = move.src * turn;
+            next.hands[myOffset + move.src]--;
+        }
+        
+        next.turn *= -1;
+        next.moveCount++;
+        return next;
+    }
+}
+
+// --- 2. Workerスクリプト (High Performance Brain) ---
+const WORKER_SCRIPT = `
+// --- Constants ---
+const HIYOKO=1, KIRIN=2, ZOU=3, LION=4, NIWATORI=5;
+
+// Move Encoding (32-bit integer)
+// bits 0-3: dst (0-11)
+// bits 4-8: src (0-11 for board, 12+(1..5)=13..17 for hand)
+// bit 9: promote (0/1)
+// bits 10-13: capture (0-5)
+// bit 14: isDrop (0/1)
+
+// Evaluation Weights
+const PIECE_VALUES = [0, 100, 400, 400, 10000, 500]; // 0, ひ, き, ぞ, 王, に
+const LION_POS_BONUS = [100, 50, 20, 0];
+
+// Direction Tables
+// Precomputed valid destinations for each square/piece/turn is too big? 
+// No, board is small (12). 
+// Let's stick to generating on fly but optimized.
+const DIRS = [
+    [],
+    [[-1, 0]], // HIYOKO
+    [[-1, 0], [1, 0], [0, -1], [0, 1]], // KIRIN
+    [[-1, -1], [-1, 1], [1, -1], [1, 1]], // ZOU
+    [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]], // LION
+    [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, 0]] // NIWATORI
+];
+
+// Zobrist Tables (Initialized at start)
+const ZOBRIST_BOARD = new BigUint64Array(12 * 14); // 12 squares * (types -5..5 offset by +7 ?) -> just use 0..11 indices
+const ZOBRIST_HAND = new BigUint64Array(2 * 6 * 3); // 2 players * 6 types * 3 counts
+let ZOBRIST_TURN;
+
+function initZobrist() {
+    for(let i=0; i<ZOBRIST_BOARD.length; i++) ZOBRIST_BOARD[i] = random64();
+    for(let i=0; i<ZOBRIST_HAND.length; i++) ZOBRIST_HAND[i] = random64();
+    ZOBRIST_TURN = random64();
+}
+function random64() {
+    return BigInt(Math.floor(Math.random() * 0xFFFFFFFF)) << 32n | BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
+}
+initZobrist();
+
+// Fast Game State
+class FastState {
+    constructor(board, hands, turn) {
+        this.board = new Int8Array(board);
+        this.hands = new Int8Array(hands); // 0-5 unused, 1-5 Sente, 7-11 Gote
+        this.turn = turn;
+        this.hash = 0n;
+        this.calcHash();
+    }
+    
+    calcHash() {
+        let h = 0n;
+        for(let i=0; i<12; i++) {
+            const p = this.board[i];
+            if(p !== 0) {
+                // p: -5..-1, 1..5. Map to index.
+                // index = i * 11 + (p+5)
+                h ^= ZOBRIST_BOARD[i * 11 + (p+5)];
+            }
+        }
+        // Hands: Sente(1-5), Gote(7-11). Map to unique indices.
+        // Sente: p(1..5) -> index (p)
+        // Gote: p(1..5) -> index (6 + p)
+        for(let p=1; p<=5; p++) {
+            const c1 = this.hands[p]; // Sente
+            if(c1 > 0) h ^= ZOBRIST_HAND[p * 3 + c1];
+            const c2 = this.hands[6+p]; // Gote
+            if(c2 > 0) h ^= ZOBRIST_HAND[(6+p) * 3 + c2];
+        }
+        if(this.turn === -1) h ^= ZOBRIST_TURN;
+        this.hash = h;
+    }
+
+    // Move Generation
+    // Returns array of integers
+    generateMoves(buffer) {
+        let cnt = 0;
+        const t = this.turn;
+        
+        // 1. Board Moves
+        for(let i=0; i<12; i++) {
+            const p = this.board[i];
+            if(p * t <= 0) continue; // Empty or enemy
+            
+            const kind = Math.abs(p);
+            const dirs = DIRS[kind];
+            const cy = (i/3)|0; const cx = i%3;
+            
+            for(let d of dirs) {
+                const dy = t===1 ? d[0] : -d[0];
+                const dx = t===1 ? d[1] : -d[1];
+                const ty = cy + dy; const tx = cx + dx;
+                
+                if(ty>=0 && ty<4 && tx>=0 && tx<3) {
+                    const dst = ty*3 + tx;
+                    const target = this.board[dst];
+                    
+                    if(target * t > 0) continue; // Friendly fire
+                    
+                    // Valid move
+                    let promote = 0;
+                    if(kind === HIYOKO) {
+                        if((t===1 && ty===0) || (t===-1 && ty===3)) promote = 1;
+                    }
+                    
+                    const capture = Math.abs(target);
+                    // Encode: dst(4) | src(5) | prom(1) | cap(4) | drop(1)
+                    // src = i (0-11)
+                    buffer[cnt++] = dst | (i << 4) | (promote << 9) | (capture << 10);
+                }
+            }
+        }
+        
+        // 2. Drops
+        const offset = t===1 ? 0 : 6;
+        for(let k=1; k<=5; k++) {
+            if(this.hands[offset+k] > 0) {
+                // Try all empty squares
+                for(let i=0; i<12; i++) {
+                    if(this.board[i] === 0) {
+                        // Hiyoko restriction
+                        if(k === HIYOKO) {
+                            const r = (i/3)|0;
+                            if((t===1 && r===0) || (t===-1 && r===3)) continue;
+                        }
+                        // Encode: dst(4) | src(5) | prom(1) | cap(4) | drop(1)
+                        // src for drop = 12 + k
+                        // drop bit = 1
+                        buffer[cnt++] = i | ((12+k) << 4) | (1 << 14);
+                    }
+                }
+            }
+        }
+        return cnt;
+    }
+
+    // Make Move (Updates state in place)
+    makeMove(m) {
+        const dst = m & 0xF;
+        const src = (m >> 4) & 0x1F;
+        const prom = (m >> 9) & 1;
+        const cap = (m >> 10) & 0xF;
+        const isDrop = (m >> 14) & 1;
+        
+        const t = this.turn;
+        
+        if(isDrop) {
+            const kind = src - 12;
+            const handIdx = (t===1 ? 0 : 6) + kind;
+            
+            // Hash Update: Remove hand, Add board
+            this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+            this.hands[handIdx]--;
+            if(this.hands[handIdx] > 0) this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+            
+            this.board[dst] = kind * t;
+            this.hash ^= ZOBRIST_BOARD[dst * 11 + (kind*t + 5)];
+        } else {
+            // Move
+            const piece = this.board[src]; // signed
+            const kind = Math.abs(piece);
+            
+            // Hash Update: Remove src
+            this.hash ^= ZOBRIST_BOARD[src * 11 + (piece + 5)];
+            this.board[src] = 0;
+            
+            // Capture
+            if(cap > 0) {
+                // Remove enemy piece from hash (it was at dst)
+                const enemyP = cap * (-t);
+                this.hash ^= ZOBRIST_BOARD[dst * 11 + (enemyP + 5)];
+                
+                // Add to hand
+                let handKind = cap;
+                if(handKind === NIWATORI) handKind = HIYOKO;
+                const handIdx = (t===1 ? 0 : 6) + handKind;
+                
+                this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+                this.hands[handIdx]++;
+                this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+            }
+            
+            // Place at dst
+            const newKind = prom ? NIWATORI : kind;
+            const newP = newKind * t;
+            this.board[dst] = newP;
+            this.hash ^= ZOBRIST_BOARD[dst * 11 + (newP + 5)];
+        }
+        
+        this.turn = -t;
+        this.hash ^= ZOBRIST_TURN;
+    }
+
+    // Unmake Move
+    unmakeMove(m) {
+        // Reverse everything
+        const dst = m & 0xF;
+        const src = (m >> 4) & 0x1F;
+        const prom = (m >> 9) & 1;
+        const cap = (m >> 10) & 0xF;
+        const isDrop = (m >> 14) & 1;
+        
+        // Turn is already flipped back effectively by caller, or we use current 'this.turn'
+        // Wait, 'this.turn' is currently the opponent of who moved.
+        const mover = -this.turn; 
+        
+        this.turn = mover;
+        this.hash ^= ZOBRIST_TURN;
+        
+        if(isDrop) {
+            const kind = src - 12;
+            const handIdx = (mover===1 ? 0 : 6) + kind;
+            
+            // Remove from board
+            this.hash ^= ZOBRIST_BOARD[dst * 11 + (kind*mover + 5)];
+            this.board[dst] = 0;
+            
+            // Add back to hand
+            if(this.hands[handIdx] > 0) this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+            this.hands[handIdx]++;
+            this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+        } else {
+            // Restore dst
+            const movedPiece = this.board[dst]; // encoded
+            let kind = Math.abs(movedPiece);
+            if(prom) kind = HIYOKO; // Demote back
+            
+            // Remove from dst
+            this.hash ^= ZOBRIST_BOARD[dst * 11 + (movedPiece + 5)];
+            
+            // Restore capture
+            if(cap > 0) {
+                const enemyP = cap * (-mover);
+                this.board[dst] = enemyP;
+                this.hash ^= ZOBRIST_BOARD[dst * 11 + (enemyP + 5)];
+                
+                // Remove from hand
+                let handKind = cap;
+                if(handKind === NIWATORI) handKind = HIYOKO;
+                const handIdx = (mover===1 ? 0 : 6) + handKind;
+                
+                this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+                this.hands[handIdx]--;
+                this.hash ^= ZOBRIST_HAND[handIdx * 3 + this.hands[handIdx]];
+            } else {
+                this.board[dst] = 0;
+            }
+            
+            // Restore src
+            const p = kind * mover;
+            this.board[src] = p;
+            this.hash ^= ZOBRIST_BOARD[src * 11 + (p + 5)];
+        }
+    }
+
+    checkWin() {
+        // Fast win check
+        // Returns 1 (Sente Win), -1 (Gote Win), 0 (None)
+        let sLion = -1, gLion = -1;
+        for(let i=0; i<12; i++) {
+            const p = this.board[i];
+            if(p === LION) sLion = i;
+            else if(p === -LION) gLion = i;
+        }
+        if(sLion === -1) return -1;
+        if(gLion === -1) return 1;
+        
+        // Try
+        if(sLion < 3 && this.turn === 1) return 1; // Sente Turn & Lion in Zone
+        if(gLion >= 9 && this.turn === -1) return -1;
+        return 0;
+    }
+}
+
+// --- Search Engine ---
+
+let tt = new Map(); // BigInt -> {depth, score, flag, bestMoveInt}
+let nodesSearched = 0;
+let startTime = 0;
+let timeLimit = 0;
+let stopSearch = false;
+
+// Pre-allocated move buffers to avoid GC
+const MAX_DEPTH = 30;
+const MOVE_BUFFERS = [];
+for(let i=0; i<=MAX_DEPTH+5; i++) MOVE_BUFFERS.push(new Int32Array(64));
+
+self.onmessage = function(e) {
+    const data = e.data;
+    if(data.type === 'START') {
+        startSearch(data);
+    } else if(data.type === 'CANCEL') {
+        stopSearch = true;
+    } else if(data.type === 'CLEARTT') {
+        tt.clear();
+    }
+};
+
+// Book (Using String Key for simplicity at root)
+const BOOK = {
+    "-2-4-30-100103420000000000001": {type: 'MOVE', src: 7, dst: 4, promote: false},
+    "-2-4-30-10210034000000000000-1": {type: 'MOVE', src: 0, dst: 3, promote: false},
+    "-2-4-30-11000342000000000000-1": {type: 'MOVE', src: 0, dst: 4, promote: false},
+};
+
+function startSearch(data) {
+    const { rootBoard, rootHands, rootTurn, durationSec, sessionId } = data;
+    stopSearch = false;
+    nodesSearched = 0;
+    startTime = performance.now();
+    timeLimit = durationSec * 1000;
+
+    // Check Book (String Key)
+    const strKey = rootBoard.join("") + rootHands.join("") + rootTurn;
+    if(BOOK[strKey]) {
+         // Validate validity roughly? Assuming valid.
+         self.postMessage({ type: 'FINISH', move: BOOK[strKey], depth: 0, score: 0, nodes: 0, nps: 0, msg: "定石" });
+         return;
+    }
+
+    const state = new FastState(rootBoard, rootHands, rootTurn);
+    
+    let bestMoveInt = 0;
+    let bestScore = -Infinity;
+    
+    // Iterative Deepening
+    for(let d=1; d<=MAX_DEPTH; d++) {
+        if(stopSearch) break;
+        
+        const score = alphaBeta(state, d, -30000, 30000, 0);
+        
+        if(!stopSearch) {
+            // Get best move from TT
+            const entry = tt.get(state.hash);
+            if(entry && entry.bestMoveInt) {
+                bestMoveInt = entry.bestMoveInt;
+                bestScore = score;
+            }
+            
+            const nps = (nodesSearched / (performance.now() - startTime)) * 1000;
+            self.postMessage({
+                type: 'PROGRESS',
+                depth: d,
+                nodes: nodesSearched,
+                score: bestScore,
+                nps: Math.round(nps)
+            });
+            
+            if(Math.abs(bestScore) > 9000) break; // Mate found
+        }
+    }
+    
+    // Convert Int Move to Object
+    const moveObj = decodeMove(bestMoveInt);
+    
+    self.postMessage({
+        type: 'FINISH',
+        move: moveObj,
+        depth: 0,
+        score: bestScore
+    });
+}
+
+function alphaBeta(state, depth, alpha, beta, ply) {
+    nodesSearched++;
+    if((nodesSearched & 2047) === 0) {
+        if(performance.now() - startTime > timeLimit) stopSearch = true;
+    }
+    if(stopSearch) return alpha;
+
+    const win = state.checkWin();
+    if(win !== 0) {
+        return win === state.turn ? (20000 - ply) : (-20000 + ply);
+    }
+
+    const key = state.hash;
+    const entry = tt.get(key);
+    if(entry && entry.depth >= depth) {
+        if(entry.flag === 0) return entry.score;
+        if(entry.flag === 1 && entry.score >= beta) return entry.score;
+        if(entry.flag === 2 && entry.score <= alpha) return entry.score;
+    }
+
+    if(depth <= 0) {
+        return evaluate(state);
+    }
+
+    const buffer = MOVE_BUFFERS[ply];
+    const count = state.generateMoves(buffer);
+    
+    if(count === 0) return -20000 + ply; // Loss (no moves)
+
+    // Move Ordering
+    const moves = [];
+    for(let i=0; i<count; i++) moves.push(buffer[i]);
+    
+    const ttMove = entry ? entry.bestMoveInt : 0;
+    
+    moves.sort((a, b) => {
+        if(a === ttMove) return -1;
+        if(b === ttMove) return 1;
+        
+        // Capture priority
+        const capA = (a >> 10) & 0xF;
+        const capB = (b >> 10) & 0xF;
+        if(capA !== capB) return PIECE_VALUES[capB] - PIECE_VALUES[capA];
+        
+        // Promote
+        const proA = (a >> 9) & 1;
+        const proB = (b >> 9) & 1;
+        return proB - proA;
+    });
+
+    let flag = 2; // Upper bound
+    let bestMove = 0;
+    let localAlpha = alpha;
+
+    for(let i=0; i<count; i++) {
+        const m = moves[i];
+        state.makeMove(m);
+        const val = -alphaBeta(state, depth - 1, -beta, -localAlpha, ply + 1);
+        state.unmakeMove(m);
+        
+        if(stopSearch) return alpha;
+
+        if(val >= beta) {
+            tt.set(key, { depth, score: val, flag: 1, bestMoveInt: m }); // Lower bound
+            return val;
+        }
+        if(val > localAlpha) {
+            localAlpha = val;
+            flag = 0; // Exact
+            bestMove = m;
+        }
+    }
+
+    tt.set(key, { depth, score: localAlpha, flag, bestMoveInt: bestMove });
+    return localAlpha;
+}
+
+function evaluate(state) {
+    let score = 0;
+    // Board
+    for(let i=0; i<12; i++) {
+        const p = state.board[i];
+        if(p === 0) continue;
+        const kind = Math.abs(p);
+        let val = PIECE_VALUES[kind];
+        if(kind === LION) {
+            const r = (i/3)|0;
+            if(p > 0) val += LION_POS_BONUS[r];
+            else val += LION_POS_BONUS[3-r];
+        }
+        if(p > 0) score += val;
+        else score -= val;
+    }
+    // Hand
+    for(let k=1; k<=5; k++) {
+        const c1 = state.hands[k];
+        if(c1 > 0) score += PIECE_VALUES[k] * c1 * 1.1;
+        const c2 = state.hands[6+k];
+        if(c2 > 0) score -= PIECE_VALUES[k] * c2 * 1.1;
+    }
+    return score * state.turn;
+}
+
+function decodeMove(m) {
+    if(!m) return null;
+    const dst = m & 0xF;
+    const srcRaw = (m >> 4) & 0x1F;
+    const prom = (m >> 9) & 1;
+    const isDrop = (m >> 14) & 1;
+    
+    if(isDrop) {
+        const kind = srcRaw - 12;
+        return { type: 'DROP', src: kind, dst: dst };
+    } else {
+        return { type: 'MOVE', src: srcRaw, dst: dst, promote: !!prom };
+    }
+}
+`;
+
+// --- 3. Worker Manager ---
+class WorkerAI {
+    constructor() {
+        const blob = new Blob([WORKER_SCRIPT], { type: "text/javascript" });
+        this.worker = new Worker(URL.createObjectURL(blob));
+        
+        this.onProgress = null;
+        this.onFinish = null;
+        this.sessionId = 0;
+
+        this.worker.onmessage = (e) => {
+            const data = e.data;
+            if (data.type === 'PROGRESS') {
+                if (this.onProgress) this.onProgress(data);
+            } else if (data.type === 'FINISH') {
+                if (this.onFinish) this.onFinish(data);
+            }
+        };
+    }
+
+    search(gameState, durationSec, sessionId, onProgress, onFinish) {
+        this.sessionId = sessionId;
+        this.onProgress = onProgress;
+        this.onFinish = onFinish;
+        
+        const payload = {
+            type: 'START',
+            rootBoard: gameState.board,
+            rootHands: gameState.hands,
+            rootTurn: gameState.turn,
+            durationSec: durationSec,
+            sessionId: sessionId
+        };
+        this.worker.postMessage(payload);
+    }
+
+    cancel() {
+        this.worker.postMessage({ type: 'CANCEL' });
+    }
+    
+    clearMemory() {
+        this.worker.postMessage({ type: 'CLEARTT' });
+    }
+}
+
+// --- 4. Main App ---
+class App {
+    constructor() {
+        this.canvas = document.getElementById("gameCanvas");
+        this.ctx = this.canvas.getContext("2d");
+        this.statusEl = document.getElementById("status-msg");
+        this.subMsgEl = document.getElementById("sub-msg");
+        this.barSente = document.getElementById("bar-sente");
+        this.barGote = document.getElementById("bar-gote");
+        this.evalText = document.getElementById("eval-text");
+        this.startScreen = document.getElementById("start-screen");
+
+        this.timeSlider = document.getElementById("ai-time");
+        this.timeVal = document.getElementById("ai-time-val");
+
+        this.timeSlider.addEventListener("input", (e) => {
+            this.timeVal.innerText = e.target.value;
+        });
+
+        this.ai = new WorkerAI();
+        this.sessionId = 0;
+
+        this.playMode = 1; 
+        this.humanTurn = 1; 
+        this.gameState = new GameState();
+        this.history = [];
+        this.selected = null;
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+
+        this.canvas.addEventListener("pointerdown", e => {
+            e.preventDefault();
+            this.handleInput(e);
+        }, { passive: false });
+
+        this.showStartScreen();
+    }
+
+    showStartScreen() {
+        this.startScreen.style.display = "flex";
+        this.ai.cancel();
+        this.isAiThinking = false;
+        this.updateStatus();
+    }
+
+    startGame(mode) {
+        this.startScreen.style.display = "none";
+        this.sessionId++;
+        this.ai.clearMemory(); 
+        
+        this.playMode = mode;
+        this.humanTurn = mode === 0 ? 0 : mode; 
+        
+        this.gameState = new GameState();
+        this.history = [];
+        this.selected = null;
+        this.isAiThinking = false;
+        
+        this.updateEvalFromScore(0);
+        this.updateStatus();
+        this.subMsgEl.innerText = "";
+        this.draw();
+
+        this.checkAiTurn();
+    }
+    
+    checkAiTurn() {
+        const turn = this.gameState.turn;
+        const gameOver = this.gameState.checkWin();
+        if (gameOver !== 0) return;
+
+        if (this.playMode === 0 || turn !== this.humanTurn) {
+            setTimeout(() => this.startAi(), 500);
+        }
+    }
+
+    handleInput(e) {
+        if (this.isAiThinking || this.playMode === 0 || this.gameState.turn !== this.humanTurn) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        if (!rect || rect.width === 0) return;
+
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const ex = (e.clientX - rect.left) * scaleX;
+        const ey = (e.clientY - rect.top) * scaleY;
+
+        // Hand
+        if (ey >= 580 && ey <= 650) {
+            const hIdx = Math.floor((ex - 50) / 65);
+            const handsList = this.gameState.getHandsList(this.humanTurn);
+            if (hIdx >= 0 && hIdx < handsList.length) {
+                this.selected = { type: 'HAND', idx: hIdx, kind: handsList[hIdx] };
+                this.draw();
+                return;
+            }
+        }
+        // Board
+        const cDisp = Math.floor((ex - BOARD_OFFSET_X) / CELL_SIZE);
+        const rDisp = Math.floor((ey - BOARD_OFFSET_Y) / CELL_SIZE);
+        if (cDisp >= 0 && cDisp < 3 && rDisp >= 0 && rDisp < 4) {
+            const logic = this.invTrans(rDisp, cDisp);
+            const idx = logic.r * 3 + logic.c;
+            const p = this.gameState.board[idx];
+
+            if (p * this.humanTurn > 0) {
+                this.selected = { type: 'BOARD', idx: idx, kind: Math.abs(p) };
+                this.draw();
+                return;
+            }
+            if (this.selected) {
+                const move = this.getLegalMove(this.selected, idx);
+                if (move) {
+                    this.executeMove(move);
+                } else {
+                    this.selected = null;
+                    this.draw();
+                }
+            }
+        } else {
+            this.selected = null;
+            this.draw();
+        }
+    }
+
+    getLegalMove(sel, dstIdx) {
+        const moves = this.gameState.getValidMoves();
+        if (sel.type === 'BOARD') {
+            const pMove = moves.find(m => m.type==='MOVE' && m.src===sel.idx && m.dst===dstIdx && m.promote);
+            if (pMove) return pMove;
+            return moves.find(m => m.type==='MOVE' && m.src===sel.idx && m.dst===dstIdx && !m.promote);
+        } else {
+            return moves.find(m => m.type==='DROP' && m.src===sel.kind && m.dst===dstIdx);
+        }
+    }
+
+    executeMove(move) {
+        this.history.push(this.gameState.clone());
+        this.gameState = this.gameState.makeMove(move);
+        this.selected = null;
+        this.draw();
+
+        const w = this.gameState.checkWin();
+        if (w !== 0) {
+            this.endGame(w);
+            return;
+        }
+        this.updateStatus();
+        this.checkAiTurn();
+    }
+
+    startAi() {
+        if (this.isAiThinking) return;
+        this.isAiThinking = true;
+        this.updateStatus();
+        const mySessionId = this.sessionId;
+        
+        const duration = parseFloat(this.timeSlider.value);
+        
+        this.ai.search(this.gameState, duration, mySessionId,
+            (data) => { 
+                if(this.sessionId === mySessionId) {
+                    this.subMsgEl.innerText = `深度:${data.depth}手 評価:${data.score} NPS:${data.nps.toLocaleString()}`;
+                    const senteScore = data.score * this.gameState.turn;
+                    this.updateEvalFromScore(senteScore);
+                }
+            },
+            (res) => { 
+                if(this.sessionId === mySessionId) this.onAiFinish(res); 
+            }
+        );
+    }
+
+    onAiFinish(res) {
+        this.isAiThinking = false;
+        if(res.msg === "定石") {
+            this.subMsgEl.innerText = "定石手";
+        }
+        
+        if (!res.move) {
+            const winner = this.gameState.turn * -1;
+            this.endGame(winner);
+            return;
+        }
+        
+        const senteScore = res.score * this.gameState.turn;
+        this.updateEvalFromScore(senteScore);
+        this.executeMove(res.move);
+    }
+
+    analyze() {
+        if (this.isAiThinking || this.isAnalyzing) return;
+        this.isAnalyzing = true;
+        this.subMsgEl.innerText = "解析中...";
+        this.updateButtons();
+        const mySessionId = this.sessionId;
+        
+        this.ai.search(this.gameState, 3.0, mySessionId,
+            (data) => { 
+                if(this.sessionId === mySessionId) {
+                    this.subMsgEl.innerText = `解析中: 深度${data.depth} 評価${data.score}`; 
+                    const senteScore = data.score * this.gameState.turn;
+                    this.updateEvalFromScore(senteScore);
+                }
+            },
+            (res) => {
+                if(this.sessionId === mySessionId) {
+                    const senteScore = res.score * this.gameState.turn;
+                    this.updateEvalFromScore(senteScore);
+                    this.isAnalyzing = false;
+                    this.subMsgEl.innerText = `解析完了: 評価値 ${res.score}`;
+                    this.updateStatus();
+                }
+            }
+        );
+    }
+
+    undo() {
+        if (this.isAiThinking || this.playMode === 0 || this.history.length === 0) return;
+        this.ai.cancel();
+        
+        let undoCount = 1;
+        if (this.playMode !== 0 && this.gameState.turn !== this.humanTurn) {
+            undoCount = 1;
+        } else {
+            undoCount = 2;
+        }
+
+        while(undoCount > 0 && this.history.length > 0) {
+            this.gameState = this.history.pop();
+            undoCount--;
+        }
+
+        this.selected = null;
+        this.draw();
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+        this.updateStatus();
+        this.subMsgEl.innerText = "待ったしました";
+    }
+
+    endGame(winner) {
+        let msg = "";
+        if (this.playMode === 0) {
+             msg = (winner === 1) ? "先手(AI)の勝ち" : "後手(AI)の勝ち";
+        } else {
+             msg = (winner === this.humanTurn) ? "あなたの勝ち！🎉" : "AIの勝ち...🤖";
+        }
+        
+        setTimeout(() => alert(msg), 100);
+        this.statusEl.innerText = `終了: ${msg}`;
+        this.isAiThinking = false;
+        this.updateButtons();
+    }
+
+    updateStatus() {
+        let tStr = this.gameState.turn===1 ? "先手(赤)" : "後手(青)";
+        
+        if (this.playMode === 0) {
+            this.statusEl.innerText = `AI対戦中: ${tStr} の手番`;
+        } else {
+            if (this.isAiThinking) {
+                this.statusEl.innerText = "AI思考中...🧠";
+                this.statusEl.style.color = "#e57373";
+            } else {
+                this.statusEl.innerText = `あなたの番です ${tStr}`;
+                this.statusEl.style.color = "#333";
+            }
+        }
+        this.updateButtons();
+    }
+
+    updateButtons() {
+        const d = this.isAiThinking || this.isAnalyzing || this.playMode === 0;
+        document.getElementById("btn-undo").disabled = d || this.history.length === 0;
+        
+        // 解析中はリセット不可、AI対戦中はリセット可能
+        document.getElementById("btn-reset").disabled = this.isAnalyzing;
+        
+        document.getElementById("btn-analyze").disabled = d;
+    }
+
+    updateEvalFromScore(score) {
+        const sigmoid = (x) => 1 / (1 + Math.exp(-x / 500));
+        let sRate = sigmoid(score);
+        
+        if (score > 9000) sRate = 1.0;
+        if (score < -9000) sRate = 0.0;
+
+        let sPer = Math.round(sRate * 100);
+        this.barSente.style.width = `${sPer}%`;
+        this.barGote.style.width = `${100 - sPer}%`;
+        this.barSente.innerText = `先手 ${score}`;
+        this.barGote.innerText = `後手 ${-score}`;
+        
+        let txt = "互角";
+        if (score > 300) txt = "先手有利";
+        if (score > 1000) txt = "先手優勢";
+        if (score < -300) txt = "後手有利";
+        if (score < -1000) txt = "後手優勢";
+        if (score > 9000) txt = "先手勝勢(詰み)";
+        if (score < -9000) txt = "後手勝勢(詰み)";
+        
+        this.evalText.innerText = `形勢: ${txt}`;
+    }
+
+    getViewFlip() { 
+        if (this.playMode === 0) return false; 
+        return this.humanTurn === -1; 
+    }
+    trans(r, c) { return this.getViewFlip() ? { r: 3-r, c: 2-c } : { r: r, c: c }; }
+    invTrans(r, c) { return this.getViewFlip() ? { r: 3-r, c: 2-c } : { r: r, c: c }; }
+
+    draw() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        for(let r=0; r<4; r++){
+            for(let c=0; c<3; c++){
+                const x = BOARD_OFFSET_X + c*CELL_SIZE;
+                const y = BOARD_OFFSET_Y + r*CELL_SIZE;
+                const isDark = (r+c)%2===1;
+                ctx.fillStyle = isDark ? COLORS.BOARD_DARK : COLORS.BOARD_LIGHT;
+                ctx.fillRect(x,y,CELL_SIZE,CELL_SIZE);
+                ctx.strokeStyle = "#8d6e63"; ctx.lineWidth=1;
+                ctx.strokeRect(x,y,CELL_SIZE,CELL_SIZE);
+            }
+        }
+
+        ctx.font = "bold 34px 'Zen Maru Gothic', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        for(let i=0; i<12; i++){
+            const p = this.gameState.board[i];
+            if(p===0) continue;
+            
+            const r = Math.floor(i/3);
+            const c = i%3;
+            const tr = this.trans(r, c);
+            const x = BOARD_OFFSET_X + tr.c*CELL_SIZE;
+            const y = BOARD_OFFSET_Y + tr.r*CELL_SIZE;
+            
+            const kind = Math.abs(p);
+            const isMy = (this.playMode === 0) ? (p > 0) : (p * this.humanTurn > 0);
+            const isSentePiece = (p > 0);
+            
+            let col = isSentePiece ? COLORS.SENTE_BASE : COLORS.GOTE_BASE;
+            let shd = isSentePiece ? COLORS.SENTE_SHADOW : COLORS.GOTE_SHADOW;
+            if(this.selected && this.selected.type==='BOARD' && this.selected.idx===i){
+                col = COLORS.SELECTED; shd = "#fbc02d";
+            }
+            let isReversed = !isSentePiece; 
+            if (this.getViewFlip()) isReversed = !isReversed;
+
+            this.drawKomaShape(x, y, CELL_SIZE, isReversed, col, shd, kind, isMy);
+        }
+        
+        const senteHands = this.gameState.getHandsList(1);
+        const goteHands = this.gameState.getHandsList(-1);
+        
+        if (this.getViewFlip()) {
+             this.drawHand(senteHands, 50, 40, false); 
+             this.drawHand(goteHands, 50, 580, true);  
+        } else {
+             this.drawHand(goteHands, 50, 40, false); 
+             this.drawHand(senteHands, 50, 580, true);  
+        }
+    }
+
+    drawKomaShape(x, y, size, isReversed, col, shd, kind, isMy) {
+        const ctx = this.ctx;
+        const w=size; const h=size; const cx=x+w/2; const cy=y+h/2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (isReversed) ctx.rotate(Math.PI);
+        ctx.translate(-cx, -cy);
+
+        ctx.beginPath();
+        ctx.moveTo(cx, y+8); ctx.lineTo(x+w-8, y+28); ctx.lineTo(x+w-12, y+h-8);
+        ctx.lineTo(x+12, y+h-8); ctx.lineTo(x+8, y+28); ctx.closePath();
+        ctx.fillStyle = shd; ctx.save(); ctx.translate(0, 4); ctx.fill(); ctx.restore();
+        const grad = ctx.createLinearGradient(x, y, x, y+h);
+        grad.addColorStop(0, col); grad.addColorStop(1, col);
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.lineWidth=1; ctx.strokeStyle="rgba(0,0,0,0.2)"; ctx.stroke();
+
+        const dirs = DIRS[kind];
+        if (dirs) {
+            for(let d of dirs) {
+                let dy = d[0]; let dx = d[1];
+                let ox = dx * 30; let oy = dy * 30;
+                if(dy===-1 && dx===-1){ox=-22;oy=-18;}
+                if(dy===-1 && dx===1){ox=22;oy=-18;}
+                if(dy===-1 && dx===0){oy=-30;}
+                if(dy===0){ox=dx*28;}
+                if(dy===1 && Math.abs(dx)===1){ox=dx*22;oy=28;}
+                if(dy===1 && dx===0){oy=30;}
+
+                ctx.beginPath();
+                ctx.arc(cx+ox, cy+oy, 4, 0, Math.PI*2);
+                ctx.fillStyle = (col === COLORS.SENTE_BASE) ? "rgba(183,28,28,0.7)" : "rgba(13,71,161,0.7)";
+                ctx.fill();
+            }
+        }
+
+        if (isReversed) { ctx.rotate(Math.PI); }
+        ctx.restore();
+
+        ctx.save();
+        ctx.font = "bold 34px 'Zen Maru Gothic', sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = COLORS.TEXT;
+        ctx.fillText(PIECE_NAMES[kind], cx, cy+8);
+        ctx.restore();
+    }
+
+    drawHand(list, sx, sy, isBottom) {
+        this.ctx.textAlign = "left";
+        this.ctx.fillStyle = COLORS.TEXT;
+        this.ctx.font = "bold 16px 'Zen Maru Gothic', sans-serif";
+        
+        let label = isBottom ? "手前" : "奥";
+        if (this.playMode === 0) {
+            label = isBottom ? "先手(AI)" : "後手(AI)";
+        }
+        
+        this.ctx.fillText(label, sx, sy-10);
+        for(let i=0; i<list.length; i++){
+            const k = list[i];
+            const x = sx + i*65;
+            let isSenteHand = (!this.getViewFlip() && isBottom) || (this.getViewFlip() && !isBottom);
+            let col = isSenteHand ? COLORS.SENTE_BASE : COLORS.GOTE_BASE;
+            let shd = isSenteHand ? COLORS.SENTE_SHADOW : COLORS.GOTE_SHADOW;
+            let isMyHand = (isBottom); 
+            if (this.selected && this.selected.type==='HAND' && this.selected.idx===i && isMyHand) {
+                 col = COLORS.SELECTED; shd = "#fbc02d";
+            }
+            this.drawKomaShape(x, sy, 50, false, col, shd, k, true);
+        }
+    }
+}
+
+window.addEventListener("load", () => {
+    window.game = new App();
+});
+</script>
 </body>
 </html>
