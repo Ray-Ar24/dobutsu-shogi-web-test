@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>動物将棋 AI (ver1.3)</title>
+    <title>動物将棋 AI (定石完全修正版)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
@@ -210,16 +210,13 @@
         <input type="range" id="ai-time" min="1" max="20" step="1" value="5">
     </div>
 
-    <div id="footer">Ultimate Edition (Opening Book & Smart Sim)</div>
+    <div id="footer">Ultimate Edition (Auto-Built Opening Book)</div>
 </div>
 
 <script>
 /**
- * 動物将棋 AI & UI (Ultimate Version)
- * - Uses Int8Array/Uint8Array for GameState to mimic C-like memory management.
- * - Runs MCTS in Web Worker.
- * - Enhanced Simulation Policy: Prioritizes winning moves (Capture Lion / Try) immediately.
- * - [NEW] Opening Book: Uses predefined best moves for opening positions.
+ * 動物将棋 AI & UI (Web Ultimate Version)
+ * - Uses dynamic opening book generation to ensure 100% hits.
  */
 
 // --- 1. 定数・クラス定義 ---
@@ -239,7 +236,7 @@ const COLORS = {
     SELECTED: "#ffee58", TEXT: "#3e2723"
 };
 
-// 駒の移動定義 (Staticに保持)
+// 駒の移動定義
 const DIRS = {
     1: [[-1, 0]], 
     2: [[-1, 0], [1, 0], [0, -1], [0, 1]],
@@ -267,6 +264,11 @@ class GameState {
         return new GameState(this);
     }
     
+    // 定石照合用キー生成メソッド
+    toStringKey() {
+        return this.board.join(",") + "|" + this.turn;
+    }
+    
     getHandsList(turn) {
         const list = [];
         const offset = turn === 1 ? 0 : 6;
@@ -283,7 +285,6 @@ class GameState {
         const moves = [];
         const turn = this.turn;
         
-        // 1. 盤上の駒の移動
         for (let i = 0; i < 12; i++) {
             const p = this.board[i];
             if (p * turn > 0) { // 自駒
@@ -310,7 +311,6 @@ class GameState {
             }
         }
         
-        // 2. 持ち駒を打つ
         const offset = turn === 1 ? 0 : 6;
         for (let k = 1; k <= 5; k++) {
             if (this.hands[offset + k] > 0) {
@@ -363,7 +363,6 @@ class GameState {
         if (sLion === -1) return { over: true, winner: -1 };
         if (gLion === -1) return { over: true, winner: 1 };
         
-        // トライルール判定
         if (sLion < 3) {
             if (this.turn === 1) return { over: true, winner: 1 };
             if (!this.isAttacked(sLion, -1)) return { over: true, winner: 1 };
@@ -420,26 +419,70 @@ const HIYOKO=${HIYOKO}, KIRIN=${KIRIN}, ZOU=${ZOU}, LION=${LION}, NIWATORI=${NIW
 const PIECE_VALUES = ${JSON.stringify(PIECE_VALUES)};
 const DIRS = ${JSON.stringify(DIRS)};
 
-// 定石データ (Opening Book)
-// キー: "boardString|turn"
-// 手: { type: 'MOVE'|'DROP', src: val, dst: val, promote: bool }
-const OPENING_BOOK = {
-    // 1. 初期配置 (先手番) -> 定石: C0キリンをC1へ (11->8)
-    "-2,-4,-3,0,-1,0,0,1,0,3,4,2|1": { type: 'MOVE', src: 11, dst: 8, promote: false },
-
-    // 2. 初期配置で先手がヒヨコを突っ込んできた場合 (B1->B2) -> 悪手咎め: 後手キリンで取る (0->4)
-    "-2,-4,-3,0,1,0,0,0,0,3,4,2|-1": { type: 'MOVE', src: 0, dst: 4, promote: false },
-    
-    // 3. 初期配置で先手がキリンを上げた後 (定石進行) -> 後手もキリンを上げる (0->3) が一般的
-    "-2,-4,-3,0,-1,0,0,1,2,3,4,0|-1": { type: 'MOVE', src: 0, dst: 3, promote: false },
-
-    // 4. 初期配置で先手がゾウを上げた場合 (9->6) -> 後手はゾウを上げる (2->5)
-    "-2,-4,-3,0,-1,0,3,1,0,0,4,2|-1": { type: 'MOVE', src: 2, dst: 5, promote: false }
-};
+// 定石データ (動的構築用)
+// 各手順: [src, dst] の連なり。promoteはAI側で自動判定
+const OPENING_LINES = [
+    // Line 1: 互いにキリン上げ -> ヒヨコ交換
+    [
+        [11, 8], // 先手キリン C0->C1
+        [0, 3],  // 後手キリン A3->A2
+        [7, 4],  // 先手ヒヨコ B1->B2 (後手ヒヨコを取る)
+        [3, 4]   // 後手キリン A2->B2 (取り返す)
+    ],
+    // Line 2: 先手ヒヨコ突っ込み（悪手）への対応
+    [
+        [7, 4],  // 先手ヒヨコ B1->B2
+        [0, 4]   // 後手キリン A3->B2 (取る)
+    ],
+    // Line 3: 互いにキリン上げ -> 互いにゾウ上げ
+    [
+        [11, 8], 
+        [0, 3],
+        // ここからゾウを上げる変化はスペースがないので通常起こらないが、
+        // 相手がゾウを上げてきた場合（隙間を作った場合）に対応するため
+        // 盤面状態を見て動的に判断させるのがベスト。
+        // ここでは基本的な「キリン上げ合い」のみを確定させておく。
+    ]
+];
 
 // クラス定義埋め込み
 ${GameState.toString()}
 ${MCTSNode.toString()}
+
+// 定石構築 (起動時に実行)
+const OPENING_BOOK = {};
+
+function buildOpeningBook() {
+    const rootState = new GameState(); // 初期盤面
+    
+    OPENING_LINES.forEach(line => {
+        let state = rootState.clone();
+        
+        for (let movePair of line) {
+            const src = movePair[0];
+            const dst = movePair[1];
+            
+            // 現在の局面のキー
+            const key = state.toStringKey();
+            
+            // 合法手チェック
+            const validMoves = state.getValidMoves();
+            const move = validMoves.find(m => m.type === 'MOVE' && m.src === src && m.dst === dst);
+            
+            if (move) {
+                // 未登録なら登録
+                if (!OPENING_BOOK[key]) {
+                    OPENING_BOOK[key] = move;
+                }
+                // 状態を進める
+                state = state.makeMove(move);
+            } else {
+                break; // 以降の手順は無効
+            }
+        }
+    });
+}
+buildOpeningBook(); // 実行
 
 let currentSessionId = 0;
 
@@ -455,14 +498,13 @@ self.onmessage = function(e) {
         rootState.turn = rootTurn;
         
         // --- 定石チェック ---
-        const boardKey = rootState.board.toString() + "|" + rootState.turn;
+        const boardKey = rootState.toStringKey(); 
         if (OPENING_BOOK[boardKey]) {
             const bookMove = OPENING_BOOK[boardKey];
-            // 定石がある場合は思考時間ゼロで即答
             self.postMessage({ 
                 type: 'FINISH', 
                 move: bookMove, 
-                sims: 9999, // 定石使用を示すダミー値
+                sims: 9999, 
                 winRate: 0.55, 
                 turn: rootState.turn 
             });
@@ -530,7 +572,7 @@ function step(root) {
         node.children.push(child);
         node = child;
     }
-    // Simulation (Playout)
+    // Simulation
     let curr = node.state.clone();
     let winner = 0;
     
@@ -542,17 +584,14 @@ function step(root) {
         const moves = curr.getValidMoves();
         if (moves.length === 0) { winner = 0; break; }
         
-        // ★強化ロジック: 必勝手（王取り、トライ）があれば即決
         let winningMove = null;
         for (let j = 0; j < moves.length; j++) {
             const m = moves[j];
             if (m.type === 'MOVE') {
-                // 1. 王を取れるなら取る (Absolute Priority)
                 if (Math.abs(curr.board[m.dst]) === LION) {
                     winningMove = m;
                     break;
                 }
-                // 2. トライできるならする (High Priority)
                 if (Math.abs(curr.board[m.src]) === LION) {
                      const ty = Math.floor(m.dst/3);
                      if ((curr.turn === 1 && ty === 0) || (curr.turn === -1 && ty === 3)) {
@@ -568,7 +607,6 @@ function step(root) {
             continue;
         }
 
-        // 通常の重み付け抽選
         let bestM = moves[0];
         let candidates = [];
         let totalW = 0;
@@ -579,7 +617,6 @@ function step(root) {
             if (m.type === 'MOVE') {
                 const target = curr.board[m.dst];
                 if (target !== 0) w += PIECE_VALUES[Math.abs(target)];
-                // トライ狙いの動きにもボーナス
                 if (Math.abs(curr.board[m.src]) === LION) {
                      const ty = Math.floor(m.dst/3);
                      if ((curr.turn === 1 && ty === 0) || (curr.turn === -1 && ty === 3)) w += 2000;
@@ -600,7 +637,6 @@ function step(root) {
         curr = curr.makeMove(bestM);
     }
     
-    // Backpropagation
     let bp = node;
     while (bp) {
         bp.visits++;
