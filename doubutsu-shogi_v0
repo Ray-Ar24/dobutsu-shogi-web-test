@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>動物将棋 AI (最適化版)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #faf7f0;
+            --primary-color: #5d4037;
+            --board-border: #8d6e63;
+            --sente-color: #ff7043;
+            --gote-color: #42a5f5;
+        }
+
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            background-color: var(--bg-color);
+            color: #3e2723;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            overscroll-behavior: none;
+        }
+
+        h1 {
+            margin: 5px 0;
+            font-size: 1.4rem;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .app-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 12px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* スタート画面オーバーレイ */
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 16px;
+            gap: 20px;
+        }
+        .start-btn {
+            width: 80%;
+            padding: 15px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+        }
+        .start-btn:active { transform: scale(0.95); }
+        .btn-sente { background: var(--sente-color); }
+        .btn-gote { background: var(--gote-color); }
+
+        /* 形勢バー */
+        #eval-container {
+            width: 100%; height: 24px; background: #eee;
+            border-radius: 12px; overflow: hidden; display: flex;
+            position: relative;
+        }
+        .eval-bar {
+            height: 100%; display: flex; align-items: center;
+            font-size: 0.75rem; font-weight: bold; color: #fff;
+            transition: width 0.5s ease-out; padding: 0 8px;
+            white-space: nowrap; overflow: hidden;
+        }
+        #bar-sente { background: var(--sente-color); width: 50%; justify-content: flex-start; }
+        #bar-gote { background: var(--gote-color); width: 50%; justify-content: flex-end; }
+        #eval-text { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--primary-color); margin-top: -5px; }
+
+        /* ステータス */
+        #status-box {
+            background: #f5f5f5; padding: 6px; border-radius: 8px;
+            text-align: center; border: 1px solid #e0e0e0;
+        }
+        #status-msg { font-size: 1rem; font-weight: bold; }
+        #sub-msg { font-size: 0.75rem; color: #757575; min-height: 1.2em; }
+
+        /* キャンバス */
+        #canvas-wrapper {
+            width: 100%;
+            aspect-ratio: 450 / 700;
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid var(--board-border);
+            background-color: #ffe082;
+            touch-action: none;
+        }
+        canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+        /* コントロール */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .controls-row { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        button {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            border: none; border-radius: 8px; padding: 0; height: 48px;
+            font-size: 0.9rem; font-weight: bold; color: white; cursor: pointer;
+            box-shadow: 0 3px 0 rgba(0,0,0,0.2); transition: transform 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        button:active { transform: translateY(3px); box-shadow: none; }
+        button:disabled { background-color: #cfd8dc !important; box-shadow: none !important; color: #90a4ae; cursor: not-allowed; transform: none; }
+
+        .btn-analyze { background-color: #8e24aa; grid-column: 1 / -1; }
+        .btn-undo { background-color: #00897b; }
+        .btn-reset { background-color: #e53935; }
+        .btn-turn { background-color: #fb8c00; }
+
+        #footer { margin-top: 10px; font-size: 0.7rem; color: #9e9e9e; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h1>🦁 動物将棋 AI</h1>
+
+    <!-- スタート画面 -->
+    <div id="start-screen">
+        <h2>対局開始</h2>
+        <button class="start-btn btn-sente" onclick="game.startGame(1)">先手で対局 (手前)</button>
+        <button class="start-btn btn-gote" onclick="game.startGame(-1)">後手で対局 (AI先手)</button>
+    </div>
+
+    <!-- 形勢バー -->
+    <div id="eval-container">
+        <div id="bar-sente" class="eval-bar" style="width: 50%">先手 50%</div>
+        <div id="bar-gote" class="eval-bar" style="width: 50%">後手 50%</div>
+    </div>
+    <div id="eval-text">形勢: 互角</div>
+
+    <div id="status-box">
+        <div id="status-msg">準備中...</div>
+        <div id="sub-msg"></div>
+    </div>
+
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="450" height="700"></canvas>
+    </div>
+
+    <div class="controls">
+        <button class="btn-analyze" id="btn-analyze" onclick="game.analyze()">🤔 形勢判断</button>
+        <div class="controls-row">
+            <button class="btn-undo" id="btn-undo" onclick="game.undo()">↩ 待った</button>
+            <button class="btn-reset" id="btn-reset" onclick="game.showStartScreen()">🔄 最初から</button>
+        </div>
+    </div>
+
+    <div id="footer">Optimaized Edition (TypedArray & Worker)</div>
+</div>
+
+<script>
+/**
+ * 動物将棋 AI & UI (Optimized Version)
+ * - Uses Int8Array/Uint8Array for GameState to mimic C-like memory management.
+ * - Runs MCTS in Web Worker.
+ */
+
+// --- 1. 定数・クラス定義 ---
+
+const HIYOKO=1, KIRIN=2, ZOU=3, LION=4, NIWATORI=5;
+const PIECE_NAMES = { 1: "ひ", 2: "き", 3: "ぞ", 4: "王", 5: "に" };
+const PIECE_VALUES = { 1: 10, 2: 40, 3: 40, 4: 1000, 5: 50 };
+
+// UI定数
+const CELL_SIZE = 100;
+const BOARD_OFFSET_X = 75;
+const BOARD_OFFSET_Y = 150;
+const COLORS = {
+    SENTE_BASE: "#ff7043", SENTE_SHADOW: "#bf360c",
+    GOTE_BASE: "#42a5f5", GOTE_SHADOW: "#0d47a1",
+    BOARD_LIGHT: "#fff9c4", BOARD_DARK: "#fff176",
+    SELECTED: "#ffee58", TEXT: "#3e2723"
+};
+
+// 駒の移動定義 (Staticに保持)
+const DIRS = {
+    1: [[-1, 0]], 
+    2: [[-1, 0], [1, 0], [0, -1], [0, 1]],
+    3: [[-1, -1], [-1, 1], [1, -1], [1, 1]],
+    4: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]],
+    5: [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, 0]]
+};
+
+class GameState {
+    constructor(cloneSource = null) {
+        if (cloneSource) {
+            // 高速コピー: TypedArrayのsliceは高速
+            this.board = cloneSource.board.slice(); 
+            this.hands = cloneSource.hands.slice();
+            this.turn = cloneSource.turn;
+            this.moveCount = cloneSource.moveCount;
+        } else {
+            // 初期盤面
+            this.board = new Int8Array([-2, -4, -3, 0, -1, 0, 0, 1, 0, 3, 4, 2]);
+            // 持ち駒管理: Uint8Array(12)
+            // index 1-5: 先手の駒(1-5)の枚数
+            // index 7-11: 後手の駒(1-5)の枚数 (offset 6)
+            this.hands = new Uint8Array(12); 
+            this.turn = 1;
+            this.moveCount = 0;
+        }
+    }
+
+    clone() {
+        return new GameState(this);
+    }
+    
+    // UI互換用: 持ち駒をリスト形式で返す
+    getHandsList(turn) {
+        const list = [];
+        const offset = turn === 1 ? 0 : 6;
+        for (let k = 1; k <= 5; k++) {
+            const count = this.hands[offset + k];
+            for (let c = 0; c < count; c++) {
+                list.push(k);
+            }
+        }
+        return list;
+    }
+
+    getValidMoves() {
+        const moves = [];
+        const turn = this.turn;
+        
+        // 1. 盤上の駒の移動
+        for (let i = 0; i < 12; i++) {
+            const p = this.board[i];
+            if (p * turn > 0) { // 自駒
+                const kind = Math.abs(p);
+                const dirs = DIRS[kind];
+                for (let d of dirs) {
+                    const r_dy = (turn === 1) ? d[0] : -d[0];
+                    const r_dx = (turn === 1) ? d[1] : -d[1];
+                    const cy = Math.floor(i / 3), cx = i % 3;
+                    const ty = cy + r_dy, tx = cx + r_dx;
+                    
+                    if (ty >= 0 && ty < 4 && tx >= 0 && tx < 3) {
+                        const ti = ty * 3 + tx;
+                        const tp = this.board[ti];
+                        if (tp === 0 || tp * turn < 0) { // 空 or 敵駒
+                            let promote = false;
+                            if (kind === HIYOKO) {
+                                if ((turn === 1 && ty === 0) || (turn === -1 && ty === 3)) promote = true;
+                            }
+                            moves.push({ type: 'MOVE', src: i, dst: ti, promote: promote });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 2. 持ち駒を打つ
+        const offset = turn === 1 ? 0 : 6;
+        let hasAnyHand = false;
+        // まず持っている駒の種類を特定（ユニーク化不要）
+        for (let k = 1; k <= 5; k++) {
+            if (this.hands[offset + k] > 0) {
+                // 空いているマスを探す
+                for (let ei = 0; ei < 12; ei++) {
+                    if (this.board[ei] === 0) {
+                        // 禁じ手チェック
+                        if (k === HIYOKO) {
+                            const r = Math.floor(ei / 3);
+                            if ((turn === 1 && r === 0) || (turn === -1 && r === 3)) continue;
+                        }
+                        moves.push({ type: 'DROP', src: k, dst: ei });
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    makeMove(move) {
+        const next = this.clone();
+        const turn = next.turn;
+        const myOffset = turn === 1 ? 0 : 6;
+        
+        if (move.type === 'MOVE') {
+            const captured = next.board[move.dst];
+            if (captured !== 0) {
+                let k = Math.abs(captured);
+                if (k === NIWATORI) k = HIYOKO;
+                next.hands[myOffset + k]++; // 持ち駒追加
+            }
+            const p = next.board[move.src];
+            next.board[move.dst] = move.promote ? (NIWATORI * turn) : p;
+            next.board[move.src] = 0;
+        } else {
+            // DROP
+            next.board[move.dst] = move.src * turn;
+            next.hands[myOffset + move.src]--; // 持ち駒消費
+        }
+        
+        next.turn *= -1;
+        next.moveCount++;
+        return next;
+    }
+
+    isGameOver() {
+        // Int8Arrayにはincludesがないのでループ検索、またはArray.from不要の高速検索
+        let sLion = -1, gLion = -1;
+        for(let i=0; i<12; i++) {
+            if (this.board[i] === 4) sLion = i;
+            else if (this.board[i] === -4) gLion = i;
+        }
+
+        if (sLion === -1) return { over: true, winner: -1 };
+        if (gLion === -1) return { over: true, winner: 1 };
+        
+        // トライルール判定
+        if (sLion < 3) { // 先手トライ
+            if (this.turn === 1) return { over: true, winner: 1 };
+            if (!this.isAttacked(sLion, -1)) return { over: true, winner: 1 };
+        }
+        if (gLion >= 9) { // 後手トライ
+            if (this.turn === -1) return { over: true, winner: -1 };
+            if (!this.isAttacked(gLion, 1)) return { over: true, winner: -1 };
+        }
+        return { over: false, winner: 0 };
+    }
+    
+    isAttacked(targetIdx, attackerTurn) {
+        for (let i = 0; i < 12; i++) {
+            const p = this.board[i];
+            if (p * attackerTurn > 0) {
+                const kind = Math.abs(p);
+                const dirs = DIRS[kind];
+                for (let d of dirs) {
+                    const r_dy = (attackerTurn === 1) ? d[0] : -d[0];
+                    const r_dx = (attackerTurn === 1) ? d[1] : -d[1];
+                    const cy = Math.floor(i / 3), cx = i % 3;
+                    const ty = cy + r_dy, tx = cx + r_dx;
+                    if (ty >= 0 && ty < 4 && tx >= 0 && tx < 3) {
+                        if ((ty * 3 + tx) === targetIdx) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+}
+
+class MCTSNode {
+    constructor(state, parent=null, move=null) {
+        this.state = state;
+        this.parent = parent;
+        this.move = move;
+        this.children = [];
+        this.wins = 0.0;
+        this.visits = 0;
+        this.untriedMoves = state.getValidMoves();
+    }
+    ucb(totalVisits) {
+        if (this.visits === 0) return Infinity;
+        return (this.wins / this.visits) + 1.41 * Math.sqrt(Math.log(totalVisits) / this.visits);
+    }
+}
+
+
+// --- 2. Workerスクリプト ---
+const WORKER_SCRIPT = `
+// 定数
+const HIYOKO=${HIYOKO}, KIRIN=${KIRIN}, ZOU=${ZOU}, LION=${LION}, NIWATORI=${NIWATORI};
+const PIECE_VALUES = ${JSON.stringify(PIECE_VALUES)};
+const DIRS = ${JSON.stringify(DIRS)};
+
+// クラス定義埋め込み
+${GameState.toString()}
+${MCTSNode.toString()}
+
+let currentSessionId = 0;
+
+self.onmessage = function(e) {
+    const data = e.data;
+    if (data.type === 'START') {
+        const { rootBoard, rootHands, rootTurn, durationSec, sessionId } = data;
+        currentSessionId = sessionId;
+        
+        const rootState = new GameState();
+        rootState.board = rootBoard; // TypedArrayはtransferable対応なら速いが、コピーでも十分
+        rootState.hands = rootHands;
+        rootState.turn = rootTurn;
+        
+        search(rootState, durationSec, sessionId);
+    } else if (data.type === 'CANCEL') {
+        currentSessionId = -1;
+    }
+};
+
+function search(rootState, durationSec, sessionId) {
+    try {
+        const root = new MCTSNode(rootState);
+        const startTime = performance.now();
+        const endTime = startTime + durationSec * 1000;
+        let sims = 0;
+
+        function runLoop() {
+            if (currentSessionId !== sessionId) return;
+
+            const now = performance.now();
+            if (now >= endTime) {
+                finalize(root, sims);
+                return;
+            }
+
+            const BATCH_SIZE = 500; 
+            for(let i=0; i<BATCH_SIZE; i++) {
+                step(root);
+                sims++;
+            }
+
+            if (sims % 5000 === 0) {
+                self.postMessage({ type: 'PROGRESS', sims });
+            }
+            setTimeout(runLoop, 0);
+        }
+        runLoop();
+
+    } catch (e) {
+        self.postMessage({ type: 'ERROR', msg: e.toString() });
+    }
+}
+
+function step(root) {
+    let node = root;
+    // Selection
+    while (node.untriedMoves.length === 0 && node.children.length > 0) {
+        let best = node.children[0], maxUcb = -Infinity;
+        const total = node.visits;
+        for (let c of node.children) {
+            const u = c.ucb(total);
+            if (u > maxUcb) { maxUcb = u; best = c; }
+        }
+        node = best;
+    }
+    // Expansion
+    if (node.untriedMoves.length > 0 && !node.state.isGameOver().over) {
+        const idx = Math.floor(Math.random() * node.untriedMoves.length);
+        const move = node.untriedMoves.splice(idx, 1)[0];
+        const nextState = node.state.makeMove(move);
+        const child = new MCTSNode(nextState, node, move);
+        node.children.push(child);
+        node = child;
+    }
+    // Simulation
+    let curr = node.state.clone();
+    let winner = 0;
+    
+    // シミュレーション高速化: オブジェクト生成を避ける
+    for (let i = 0; i < 80; i++) {
+        const res = curr.isGameOver();
+        if (res.over) { winner = res.winner; break; }
+        
+        const moves = curr.getValidMoves();
+        if (moves.length === 0) { winner = 0; break; }
+        
+        let bestM = moves[0];
+        // 簡易評価による重み付け
+        let candidates = [];
+        let totalW = 0;
+        
+        for (let j = 0; j < moves.length; j++) {
+            const m = moves[j];
+            let w = 10;
+            if (m.type === 'MOVE') {
+                const target = curr.board[m.dst];
+                if (target !== 0) w += PIECE_VALUES[Math.abs(target)];
+                // トライ
+                if (Math.abs(curr.board[m.src]) === LION) {
+                     const ty = Math.floor(m.dst/3);
+                     if ((curr.turn === 1 && ty === 0) || (curr.turn === -1 && ty === 3)) w += 2000;
+                }
+            }
+            candidates.push({m, w});
+            totalW += w;
+        }
+
+        let r = Math.random() * totalW;
+        for (let c of candidates) {
+            r -= c.w;
+            if (r <= 0) {
+                bestM = c.m;
+                break;
+            }
+        }
+        curr = curr.makeMove(bestM);
+    }
+    
+    // Backpropagation
+    let bp = node;
+    while (bp) {
+        bp.visits++;
+        if (bp.parent) {
+            const pTurn = bp.parent.state.turn;
+            let reward = (winner === pTurn) ? 1.0 : (winner === 0 ? 0.5 : 0);
+            bp.wins += reward;
+        }
+        bp = bp.parent;
+    }
+}
+
+function finalize(root, sims) {
+    let bestNode = null, maxV = -1, bestRate = 0.5;
+    if (root.children) {
+        for (let c of root.children) {
+            if (c.visits > maxV) { maxV = c.visits; bestNode = c; bestRate = c.wins/c.visits; }
+        }
+    }
+    self.postMessage({ 
+        type: 'FINISH', 
+        move: bestNode ? bestNode.move : null, 
+        sims, 
+        winRate: bestRate, 
+        turn: root.state.turn 
+    });
+}
+`;
+
+
+// --- 3. Worker Manager ---
+class WorkerAI {
+    constructor() {
+        const blob = new Blob([WORKER_SCRIPT], { type: "text/javascript" });
+        this.worker = new Worker(URL.createObjectURL(blob));
+        
+        this.onProgress = null;
+        this.onFinish = null;
+        this.sessionId = 0;
+
+        this.worker.onmessage = (e) => {
+            const data = e.data;
+            if (data.type === 'PROGRESS') {
+                if (this.onProgress) this.onProgress(data.sims);
+            } else if (data.type === 'FINISH') {
+                if (this.onFinish) this.onFinish(data);
+            } else if (data.type === 'ERROR') {
+                console.error("Worker Error:", data.msg);
+                if (this.onFinish) this.onFinish({ move: null, winRate: 0.5 });
+            }
+        };
+    }
+
+    search(gameState, durationSec, sessionId, onProgress, onFinish) {
+        this.sessionId = sessionId;
+        this.onProgress = onProgress;
+        this.onFinish = onFinish;
+        
+        // Structured CloneでTypedArrayも効率的に転送
+        const payload = {
+            type: 'START',
+            rootBoard: gameState.board,
+            rootHands: gameState.hands,
+            rootTurn: gameState.turn,
+            durationSec: durationSec,
+            sessionId: sessionId
+        };
+        this.worker.postMessage(payload);
+    }
+
+    cancel() {
+        this.worker.postMessage({ type: 'CANCEL' });
+    }
+}
+
+// --- 4. Main App ---
+class App {
+    constructor() {
+        this.canvas = document.getElementById("gameCanvas");
+        this.ctx = this.canvas.getContext("2d");
+        this.statusEl = document.getElementById("status-msg");
+        this.subMsgEl = document.getElementById("sub-msg");
+        this.barSente = document.getElementById("bar-sente");
+        this.barGote = document.getElementById("bar-gote");
+        this.evalText = document.getElementById("eval-text");
+        this.startScreen = document.getElementById("start-screen");
+
+        this.ai = new WorkerAI();
+        this.sessionId = 0;
+
+        this.humanTurn = 1;
+        this.gameState = new GameState();
+        this.history = [];
+        this.selected = null;
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+
+        this.canvas.addEventListener("pointerdown", e => {
+            e.preventDefault();
+            this.handleInput(e);
+        }, { passive: false });
+
+        this.showStartScreen();
+    }
+
+    showStartScreen() {
+        this.startScreen.style.display = "flex";
+        this.ai.cancel();
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+        this.updateStatus();
+    }
+
+    startGame(hTurn) {
+        this.startScreen.style.display = "none";
+        this.sessionId++;
+        this.humanTurn = hTurn;
+        this.gameState = new GameState();
+        this.history = [];
+        this.selected = null;
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+        
+        this.updateEval(0.5, 1);
+        this.updateStatus();
+        this.subMsgEl.innerText = "";
+        this.draw();
+
+        if (this.gameState.turn !== this.humanTurn) {
+            this.startAi();
+        }
+    }
+
+    handleInput(e) {
+        if (this.isAiThinking || this.isAnalyzing || this.gameState.turn !== this.humanTurn) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        if (!rect || rect.width === 0) return;
+
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const ex = (e.clientX - rect.left) * scaleX;
+        const ey = (e.clientY - rect.top) * scaleY;
+
+        // Hand
+        if (ey >= 580 && ey <= 650) {
+            const hIdx = Math.floor((ex - 50) / 65);
+            // UI用にリスト形式で取得
+            const handsList = this.gameState.getHandsList(this.humanTurn);
+            if (hIdx >= 0 && hIdx < handsList.length) {
+                this.selected = { type: 'HAND', idx: hIdx, kind: handsList[hIdx] };
+                this.draw();
+                return;
+            }
+        }
+        // Board
+        const cDisp = Math.floor((ex - BOARD_OFFSET_X) / CELL_SIZE);
+        const rDisp = Math.floor((ey - BOARD_OFFSET_Y) / CELL_SIZE);
+        if (cDisp >= 0 && cDisp < 3 && rDisp >= 0 && rDisp < 4) {
+            const logic = this.invTrans(rDisp, cDisp);
+            const idx = logic.r * 3 + logic.c;
+            const p = this.gameState.board[idx];
+
+            if (p * this.humanTurn > 0) {
+                this.selected = { type: 'BOARD', idx: idx, kind: Math.abs(p) };
+                this.draw();
+                return;
+            }
+            if (this.selected) {
+                const move = this.getLegalMove(this.selected, idx);
+                if (move) {
+                    this.executeMove(move);
+                } else {
+                    this.selected = null;
+                    this.draw();
+                }
+            }
+        } else {
+            this.selected = null;
+            this.draw();
+        }
+    }
+
+    getLegalMove(sel, dstIdx) {
+        const moves = this.gameState.getValidMoves();
+        if (sel.type === 'BOARD') {
+            const pMove = moves.find(m => m.type==='MOVE' && m.src===sel.idx && m.dst===dstIdx && m.promote);
+            if (pMove) return pMove;
+            return moves.find(m => m.type==='MOVE' && m.src===sel.idx && m.dst===dstIdx && !m.promote);
+        } else {
+            return moves.find(m => m.type==='DROP' && m.src===sel.kind && m.dst===dstIdx);
+        }
+    }
+
+    executeMove(move) {
+        this.history.push(this.gameState.clone());
+        this.gameState = this.gameState.makeMove(move);
+        this.selected = null;
+        this.draw();
+
+        const over = this.gameState.isGameOver();
+        if (over.over) {
+            this.endGame(over.winner);
+            return;
+        }
+        this.updateStatus();
+        if (this.gameState.turn !== this.humanTurn) {
+            this.startAi();
+        }
+    }
+
+    startAi() {
+        this.isAiThinking = true;
+        this.updateStatus();
+        const mySessionId = this.sessionId;
+        
+        this.ai.search(this.gameState, 5.0, mySessionId,
+            (sims) => { 
+                if(this.sessionId === mySessionId) this.subMsgEl.innerText = `読み筋: ${sims.toLocaleString()}手`; 
+            },
+            (res) => { 
+                if(this.sessionId === mySessionId) this.onAiFinish(res); 
+            }
+        );
+    }
+
+    onAiFinish(res) {
+        this.isAiThinking = false;
+        this.updateEval(res.winRate, res.turn);
+        
+        if (!res.move) {
+            alert("AIが手を生成できませんでした（投了）");
+            this.updateStatus();
+            return;
+        }
+        
+        this.history.push(this.gameState.clone());
+        this.gameState = this.gameState.makeMove(res.move);
+        this.draw();
+        
+        const over = this.gameState.isGameOver();
+        if (over.over) {
+            this.endGame(over.winner);
+        } else {
+            this.updateStatus();
+        }
+    }
+
+    analyze() {
+        if (this.isAiThinking || this.isAnalyzing) return;
+        this.isAnalyzing = true;
+        this.updateStatus();
+        const mySessionId = this.sessionId;
+        
+        this.ai.search(this.gameState, 3.0, mySessionId,
+            (sims) => { if(this.sessionId === mySessionId) this.subMsgEl.innerText = `解析中: ${sims.toLocaleString()}`; },
+            (res) => {
+                if(this.sessionId === mySessionId) {
+                    this.updateEval(res.winRate, res.turn);
+                    this.isAnalyzing = false;
+                    this.subMsgEl.innerText = `解析完了`;
+                    this.updateStatus();
+                }
+            }
+        );
+    }
+
+    undo() {
+        if (this.isAiThinking || this.isAnalyzing || this.history.length === 0) return;
+        this.ai.cancel();
+        
+        if (this.history.length >= 2) {
+            this.history.pop();
+            this.gameState = this.history.pop();
+        } else if (this.history.length === 1) {
+            this.gameState = this.history.pop();
+        }
+        this.selected = null;
+        this.draw();
+        
+        if (this.gameState.turn !== this.humanTurn) {
+            this.startAi();
+        } else {
+            this.isAiThinking = false;
+            this.isAnalyzing = false;
+            this.updateStatus();
+            this.subMsgEl.innerText = "待ったしました";
+        }
+    }
+
+    switchTurn() {
+        if(confirm("手番を交代してリセットしますか？")) {
+            this.startGame(this.humanTurn * -1);
+        }
+    }
+
+    endGame(winner) {
+        const msg = (winner === this.humanTurn) ? "あなたの勝ち！🎉" : "AIの勝ち...🤖";
+        setTimeout(() => alert(msg), 100);
+        this.statusEl.innerText = `終了: ${msg}`;
+        this.isAiThinking = false;
+        this.isAnalyzing = false;
+        this.updateButtons();
+    }
+
+    updateStatus() {
+        const t = this.humanTurn===1 ? "先手(赤)" : "後手(青)";
+        if (this.isAiThinking) {
+            this.statusEl.innerText = "AI思考中...";
+            this.statusEl.style.color = "#e57373";
+        } else if (this.isAnalyzing) {
+            this.statusEl.innerText = "形勢判断中...";
+            this.statusEl.style.color = "#ab47bc";
+        } else {
+            this.statusEl.innerText = `あなたの番です ${t}`;
+            this.statusEl.style.color = "#333";
+        }
+        this.updateButtons();
+    }
+
+    updateButtons() {
+        const d = this.isAiThinking || this.isAnalyzing;
+        document.getElementById("btn-undo").disabled = d || this.history.length === 0;
+        document.getElementById("btn-reset").disabled = d;
+        document.getElementById("btn-analyze").disabled = d || (this.gameState.turn !== this.humanTurn);
+    }
+
+    updateEval(rate, turnFrom) {
+        let sRate = (turnFrom === 1) ? rate : (1.0 - rate);
+        let sPer = Math.round(sRate * 100);
+        this.barSente.style.width = `${sPer}%`;
+        this.barGote.style.width = `${100 - sPer}%`;
+        this.barSente.innerText = `先手 ${sPer}%`;
+        this.barGote.innerText = `後手 ${100-sPer}%`;
+        
+        let txt = "互角";
+        if (sPer >= 60) txt = "先手優勢";
+        else if (sPer <= 40) txt = "後手優勢";
+        else if (sPer >= 53) txt = "先手有利";
+        else if (sPer <= 47) txt = "後手有利";
+        this.evalText.innerText = `形勢: ${txt}`;
+    }
+
+    getViewFlip() { return this.humanTurn === -1; }
+    trans(r, c) { return this.getViewFlip() ? { r: 3-r, c: 2-c } : { r: r, c: c }; }
+    invTrans(r, c) { return this.getViewFlip() ? { r: 3-r, c: 2-c } : { r: r, c: c }; }
+
+    draw() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        for(let r=0; r<4; r++){
+            for(let c=0; c<3; c++){
+                const x = BOARD_OFFSET_X + c*CELL_SIZE;
+                const y = BOARD_OFFSET_Y + r*CELL_SIZE;
+                const isDark = (r+c)%2===1;
+                ctx.fillStyle = isDark ? COLORS.BOARD_DARK : COLORS.BOARD_LIGHT;
+                ctx.fillRect(x,y,CELL_SIZE,CELL_SIZE);
+                ctx.strokeStyle = "#8d6e63"; ctx.lineWidth=1;
+                ctx.strokeRect(x,y,CELL_SIZE,CELL_SIZE);
+            }
+        }
+
+        ctx.font = "bold 34px 'Zen Maru Gothic', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        for(let i=0; i<12; i++){
+            const p = this.gameState.board[i];
+            if(p===0) continue;
+            
+            const r = Math.floor(i/3);
+            const c = i%3;
+            const tr = this.trans(r, c);
+            const x = BOARD_OFFSET_X + tr.c*CELL_SIZE;
+            const y = BOARD_OFFSET_Y + tr.r*CELL_SIZE;
+            
+            const kind = Math.abs(p);
+            const isMy = (p*this.humanTurn > 0);
+            const isSentePiece = (p > 0);
+            
+            let col = isMy ? COLORS.SENTE_BASE : COLORS.GOTE_BASE;
+            let shd = isMy ? COLORS.SENTE_SHADOW : COLORS.GOTE_SHADOW;
+            if(this.selected && this.selected.type==='BOARD' && this.selected.idx===i){
+                col = COLORS.SELECTED; shd = "#fbc02d";
+            }
+            let isReversed = !isSentePiece; 
+            if (this.getViewFlip()) isReversed = !isReversed;
+
+            this.drawKomaShape(x, y, CELL_SIZE, isReversed, col, shd, kind, isMy, isSentePiece);
+        }
+        
+        // UI向けにリスト形式に変換して描画
+        const goteHands = this.gameState.getHandsList(-1*this.humanTurn);
+        const senteHands = this.gameState.getHandsList(this.humanTurn);
+        this.drawHand(goteHands, 50, 40, false);
+        this.drawHand(senteHands, 50, 580, true);
+    }
+
+    drawKomaShape(x, y, size, isReversed, col, shd, kind, isMy, isSentePiece) {
+        const ctx = this.ctx;
+        const w=size; const h=size; const cx=x+w/2; const cy=y+h/2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (isReversed) ctx.rotate(Math.PI);
+        ctx.translate(-cx, -cy);
+
+        ctx.beginPath();
+        ctx.moveTo(cx, y+8); ctx.lineTo(x+w-8, y+28); ctx.lineTo(x+w-12, y+h-8);
+        ctx.lineTo(x+12, y+h-8); ctx.lineTo(x+8, y+28); ctx.closePath();
+        ctx.fillStyle = shd; ctx.save(); ctx.translate(0, 4); ctx.fill(); ctx.restore();
+        const grad = ctx.createLinearGradient(x, y, x, y+h);
+        grad.addColorStop(0, col); grad.addColorStop(1, col);
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.lineWidth=1; ctx.strokeStyle="rgba(0,0,0,0.2)"; ctx.stroke();
+
+        const dirs = DIRS[kind];
+        if (dirs) {
+            for(let d of dirs) {
+                let dy = d[0]; let dx = d[1];
+                let ox = dx * 30; let oy = dy * 30;
+                if(dy===-1 && dx===-1){ox=-22;oy=-18;}
+                if(dy===-1 && dx===1){ox=22;oy=-18;}
+                if(dy===-1 && dx===0){oy=-30;}
+                if(dy===0){ox=dx*28;}
+                if(dy===1 && Math.abs(dx)===1){ox=dx*22;oy=28;}
+                if(dy===1 && dx===0){oy=30;}
+
+                ctx.beginPath();
+                ctx.arc(cx+ox, cy+oy, 4, 0, Math.PI*2);
+                ctx.fillStyle = isMy ? "rgba(183,28,28,0.7)" : "rgba(13,71,161,0.7)";
+                ctx.fill();
+            }
+        }
+
+        if (isReversed) { ctx.rotate(Math.PI); }
+        ctx.restore();
+
+        ctx.save();
+        ctx.font = "bold 34px 'Zen Maru Gothic', sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = COLORS.TEXT;
+        ctx.fillText(PIECE_NAMES[kind], cx, cy+8);
+        ctx.restore();
+    }
+
+    drawHand(list, sx, sy, isMine) {
+        this.ctx.textAlign = "left";
+        this.ctx.fillStyle = COLORS.TEXT;
+        this.ctx.font = "bold 16px 'Zen Maru Gothic', sans-serif";
+        this.ctx.fillText(isMine?"自分(手前)":"AI(奥)", sx, sy-10);
+        for(let i=0; i<list.length; i++){
+            const k = list[i];
+            const x = sx + i*65;
+            let col = isMine ? COLORS.SENTE_BASE : COLORS.GOTE_BASE;
+            let shd = isMine ? COLORS.SENTE_SHADOW : COLORS.GOTE_SHADOW;
+            if(isMine && this.selected && this.selected.type==='HAND' && this.selected.idx===i){
+                col = COLORS.SELECTED; shd = "#fbc02d";
+            }
+            this.drawKomaShape(x, sy, 50, false, col, shd, k, isMine, true);
+        }
+    }
+}
+
+window.addEventListener("load", () => {
+    window.game = new App();
+});
+</script>
+</body>
+</html>
