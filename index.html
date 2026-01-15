@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>動物将棋 AI (ver1.2)</title>
+    <title>動物将棋 AI (ver1.3)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
@@ -143,7 +143,7 @@
         .btn-reset { background-color: #e53935; }
         .btn-turn { background-color: #fb8c00; }
 
-        /* 追加: 設定ボックス */
+        /* 設定ボックス */
         #settings-box {
             background: #fff3e0;
             padding: 8px 12px;
@@ -204,20 +204,22 @@
         </div>
     </div>
 
-    <!-- 追加: 思考時間設定 -->
+    <!-- 思考時間設定 -->
     <div id="settings-box">
         <label for="ai-time">AI思考時間: <span id="ai-time-val">5</span>秒</label>
         <input type="range" id="ai-time" min="1" max="20" step="1" value="5">
     </div>
 
-    <div id="footer">Optimaized Edition (TypedArray & Worker)</div>
+    <div id="footer">Ultimate Edition (Opening Book & Smart Sim)</div>
 </div>
 
 <script>
 /**
- * 動物将棋 AI & UI (Optimized Version)
+ * 動物将棋 AI & UI (Ultimate Version)
  * - Uses Int8Array/Uint8Array for GameState to mimic C-like memory management.
  * - Runs MCTS in Web Worker.
+ * - Enhanced Simulation Policy: Prioritizes winning moves (Capture Lion / Try) immediately.
+ * - [NEW] Opening Book: Uses predefined best moves for opening positions.
  */
 
 // --- 1. 定数・クラス定義 ---
@@ -249,17 +251,12 @@ const DIRS = {
 class GameState {
     constructor(cloneSource = null) {
         if (cloneSource) {
-            // 高速コピー: TypedArrayのsliceは高速
             this.board = cloneSource.board.slice(); 
             this.hands = cloneSource.hands.slice();
             this.turn = cloneSource.turn;
             this.moveCount = cloneSource.moveCount;
         } else {
-            // 初期盤面
             this.board = new Int8Array([-2, -4, -3, 0, -1, 0, 0, 1, 0, 3, 4, 2]);
-            // 持ち駒管理: Uint8Array(12)
-            // index 1-5: 先手の駒(1-5)の枚数
-            // index 7-11: 後手の駒(1-5)の枚数 (offset 6)
             this.hands = new Uint8Array(12); 
             this.turn = 1;
             this.moveCount = 0;
@@ -270,7 +267,6 @@ class GameState {
         return new GameState(this);
     }
     
-    // UI互換用: 持ち駒をリスト形式で返す
     getHandsList(turn) {
         const list = [];
         const offset = turn === 1 ? 0 : 6;
@@ -316,14 +312,10 @@ class GameState {
         
         // 2. 持ち駒を打つ
         const offset = turn === 1 ? 0 : 6;
-        let hasAnyHand = false;
-        // まず持っている駒の種類を特定（ユニーク化不要）
         for (let k = 1; k <= 5; k++) {
             if (this.hands[offset + k] > 0) {
-                // 空いているマスを探す
                 for (let ei = 0; ei < 12; ei++) {
                     if (this.board[ei] === 0) {
-                        // 禁じ手チェック
                         if (k === HIYOKO) {
                             const r = Math.floor(ei / 3);
                             if ((turn === 1 && r === 0) || (turn === -1 && r === 3)) continue;
@@ -346,15 +338,14 @@ class GameState {
             if (captured !== 0) {
                 let k = Math.abs(captured);
                 if (k === NIWATORI) k = HIYOKO;
-                next.hands[myOffset + k]++; // 持ち駒追加
+                next.hands[myOffset + k]++;
             }
             const p = next.board[move.src];
             next.board[move.dst] = move.promote ? (NIWATORI * turn) : p;
             next.board[move.src] = 0;
         } else {
-            // DROP
             next.board[move.dst] = move.src * turn;
-            next.hands[myOffset + move.src]--; // 持ち駒消費
+            next.hands[myOffset + move.src]--;
         }
         
         next.turn *= -1;
@@ -363,7 +354,6 @@ class GameState {
     }
 
     isGameOver() {
-        // Int8Arrayにはincludesがないのでループ検索、またはArray.from不要の高速検索
         let sLion = -1, gLion = -1;
         for(let i=0; i<12; i++) {
             if (this.board[i] === 4) sLion = i;
@@ -374,11 +364,11 @@ class GameState {
         if (gLion === -1) return { over: true, winner: 1 };
         
         // トライルール判定
-        if (sLion < 3) { // 先手トライ
+        if (sLion < 3) {
             if (this.turn === 1) return { over: true, winner: 1 };
             if (!this.isAttacked(sLion, -1)) return { over: true, winner: 1 };
         }
-        if (gLion >= 9) { // 後手トライ
+        if (gLion >= 9) {
             if (this.turn === -1) return { over: true, winner: -1 };
             if (!this.isAttacked(gLion, 1)) return { over: true, winner: -1 };
         }
@@ -423,12 +413,29 @@ class MCTSNode {
 }
 
 
-// --- 2. Workerスクリプト ---
+// --- 2. Workerスクリプト (Brain) ---
 const WORKER_SCRIPT = `
 // 定数
 const HIYOKO=${HIYOKO}, KIRIN=${KIRIN}, ZOU=${ZOU}, LION=${LION}, NIWATORI=${NIWATORI};
 const PIECE_VALUES = ${JSON.stringify(PIECE_VALUES)};
 const DIRS = ${JSON.stringify(DIRS)};
+
+// 定石データ (Opening Book)
+// キー: "boardString|turn"
+// 手: { type: 'MOVE'|'DROP', src: val, dst: val, promote: bool }
+const OPENING_BOOK = {
+    // 1. 初期配置 (先手番) -> 定石: C0キリンをC1へ (11->8)
+    "-2,-4,-3,0,-1,0,0,1,0,3,4,2|1": { type: 'MOVE', src: 11, dst: 8, promote: false },
+
+    // 2. 初期配置で先手がヒヨコを突っ込んできた場合 (B1->B2) -> 悪手咎め: 後手キリンで取る (0->4)
+    "-2,-4,-3,0,1,0,0,0,0,3,4,2|-1": { type: 'MOVE', src: 0, dst: 4, promote: false },
+    
+    // 3. 初期配置で先手がキリンを上げた後 (定石進行) -> 後手もキリンを上げる (0->3) が一般的
+    "-2,-4,-3,0,-1,0,0,1,2,3,4,0|-1": { type: 'MOVE', src: 0, dst: 3, promote: false },
+
+    // 4. 初期配置で先手がゾウを上げた場合 (9->6) -> 後手はゾウを上げる (2->5)
+    "-2,-4,-3,0,-1,0,3,1,0,0,4,2|-1": { type: 'MOVE', src: 2, dst: 5, promote: false }
+};
 
 // クラス定義埋め込み
 ${GameState.toString()}
@@ -443,10 +450,25 @@ self.onmessage = function(e) {
         currentSessionId = sessionId;
         
         const rootState = new GameState();
-        rootState.board = rootBoard; // TypedArrayはtransferable対応なら速いが、コピーでも十分
+        rootState.board = rootBoard;
         rootState.hands = rootHands;
         rootState.turn = rootTurn;
         
+        // --- 定石チェック ---
+        const boardKey = rootState.board.toString() + "|" + rootState.turn;
+        if (OPENING_BOOK[boardKey]) {
+            const bookMove = OPENING_BOOK[boardKey];
+            // 定石がある場合は思考時間ゼロで即答
+            self.postMessage({ 
+                type: 'FINISH', 
+                move: bookMove, 
+                sims: 9999, // 定石使用を示すダミー値
+                winRate: 0.55, 
+                turn: rootState.turn 
+            });
+            return;
+        }
+
         search(rootState, durationSec, sessionId);
     } else if (data.type === 'CANCEL') {
         currentSessionId = -1;
@@ -469,7 +491,7 @@ function search(rootState, durationSec, sessionId) {
                 return;
             }
 
-            const BATCH_SIZE = 500; 
+            const BATCH_SIZE = 1000;
             for(let i=0; i<BATCH_SIZE; i++) {
                 step(root);
                 sims++;
@@ -508,20 +530,46 @@ function step(root) {
         node.children.push(child);
         node = child;
     }
-    // Simulation
+    // Simulation (Playout)
     let curr = node.state.clone();
     let winner = 0;
     
-    // シミュレーション高速化: オブジェクト生成を避ける
-    for (let i = 0; i < 80; i++) {
+    // シミュレーション深さを1.5倍に強化 (80 -> 120)
+    for (let i = 0; i < 120; i++) {
         const res = curr.isGameOver();
         if (res.over) { winner = res.winner; break; }
         
         const moves = curr.getValidMoves();
         if (moves.length === 0) { winner = 0; break; }
         
+        // ★強化ロジック: 必勝手（王取り、トライ）があれば即決
+        let winningMove = null;
+        for (let j = 0; j < moves.length; j++) {
+            const m = moves[j];
+            if (m.type === 'MOVE') {
+                // 1. 王を取れるなら取る (Absolute Priority)
+                if (Math.abs(curr.board[m.dst]) === LION) {
+                    winningMove = m;
+                    break;
+                }
+                // 2. トライできるならする (High Priority)
+                if (Math.abs(curr.board[m.src]) === LION) {
+                     const ty = Math.floor(m.dst/3);
+                     if ((curr.turn === 1 && ty === 0) || (curr.turn === -1 && ty === 3)) {
+                         winningMove = m;
+                         break;
+                     }
+                }
+            }
+        }
+
+        if (winningMove) {
+            curr = curr.makeMove(winningMove);
+            continue;
+        }
+
+        // 通常の重み付け抽選
         let bestM = moves[0];
-        // 簡易評価による重み付け
         let candidates = [];
         let totalW = 0;
         
@@ -531,7 +579,7 @@ function step(root) {
             if (m.type === 'MOVE') {
                 const target = curr.board[m.dst];
                 if (target !== 0) w += PIECE_VALUES[Math.abs(target)];
-                // トライ
+                // トライ狙いの動きにもボーナス
                 if (Math.abs(curr.board[m.src]) === LION) {
                      const ty = Math.floor(m.dst/3);
                      if ((curr.turn === 1 && ty === 0) || (curr.turn === -1 && ty === 3)) w += 2000;
@@ -611,7 +659,6 @@ class WorkerAI {
         this.onProgress = onProgress;
         this.onFinish = onFinish;
         
-        // Structured CloneでTypedArrayも効率的に転送
         const payload = {
             type: 'START',
             rootBoard: gameState.board,
@@ -640,11 +687,9 @@ class App {
         this.evalText = document.getElementById("eval-text");
         this.startScreen = document.getElementById("start-screen");
 
-        // 追加: 設定要素
         this.timeSlider = document.getElementById("ai-time");
         this.timeVal = document.getElementById("ai-time-val");
 
-        // スライダーのイベントリスナー
         this.timeSlider.addEventListener("input", (e) => {
             this.timeVal.innerText = e.target.value;
         });
@@ -709,7 +754,6 @@ class App {
         // Hand
         if (ey >= 580 && ey <= 650) {
             const hIdx = Math.floor((ex - 50) / 65);
-            // UI用にリスト形式で取得
             const handsList = this.gameState.getHandsList(this.humanTurn);
             if (hIdx >= 0 && hIdx < handsList.length) {
                 this.selected = { type: 'HAND', idx: hIdx, kind: handsList[hIdx] };
@@ -778,12 +822,17 @@ class App {
         this.updateStatus();
         const mySessionId = this.sessionId;
         
-        // スライダーから思考時間を取得
         const duration = parseFloat(this.timeSlider.value);
         
         this.ai.search(this.gameState, duration, mySessionId,
             (sims) => { 
-                if(this.sessionId === mySessionId) this.subMsgEl.innerText = `読み筋: ${sims.toLocaleString()}手`; 
+                if(this.sessionId === mySessionId) {
+                    if (sims === 9999) {
+                        this.subMsgEl.innerText = `定石手`;
+                    } else {
+                        this.subMsgEl.innerText = `読み筋: ${sims.toLocaleString()}手`;
+                    }
+                }
             },
             (res) => { 
                 if(this.sessionId === mySessionId) this.onAiFinish(res); 
@@ -957,7 +1006,6 @@ class App {
             this.drawKomaShape(x, y, CELL_SIZE, isReversed, col, shd, kind, isMy, isSentePiece);
         }
         
-        // UI向けにリスト形式に変換して描画
         const goteHands = this.gameState.getHandsList(-1*this.humanTurn);
         const senteHands = this.gameState.getHandsList(this.humanTurn);
         this.drawHand(goteHands, 50, 40, false);
