@@ -1,0 +1,1 @@
+# dobutsu-shogi-web-test
